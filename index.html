@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#77c96d" />
+    <title>卡通割草幸存者</title>
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="game-canvas" aria-label="卡通割草幸存者游戏画面"></canvas>
+      <section id="hud" aria-live="polite">
+        <div class="meter-cluster">
+          <div class="meter-row">
+            <span>HP</span>
+            <div class="meter-track"><div id="health-fill" class="meter-fill health"></div></div>
+          </div>
+          <div class="meter-row">
+            <span>STA</span>
+            <div class="meter-track"><div id="stamina-fill" class="meter-fill stamina"></div></div>
+          </div>
+          <div class="meter-row">
+            <span>XP</span>
+            <div class="meter-track"><div id="xp-fill" class="meter-fill xp"></div></div>
+          </div>
+        </div>
+        <div class="hud-pill"><span>LV</span><strong id="level-value">01</strong></div>
+        <div class="hud-pill"><span>K.O.</span><strong id="kill-value">000</strong></div>
+        <div class="hud-pill"><span>TIME</span><strong id="timer-value">00:00</strong></div>
+        <div class="hud-pill"><span>ENEMY</span><strong id="enemy-value">00</strong></div>
+        <div id="weapon-name">未选武器</div>
+        <div id="skill-value">无技能</div>
+        <div id="status-line">选择开局枪械</div>
+      </section>
+      <div id="top-actions">
+        <button id="pause-button" type="button" aria-label="暂停">II</button>
+        <button id="restart-button" type="button" aria-label="重新开始">R</button>
+      </div>
+      <section id="overlay">
+        <div class="overlay-panel">
+          <h1 id="overlay-title">选择开局枪械</h1>
+          <div id="overlay-body" class="choice-grid"></div>
+        </div>
+      </section>
+      <div id="touch-controls" aria-hidden="true">
+        <div id="touch-stick">
+          <div id="touch-knob"></div>
+        </div>
+        <button id="dash-button" type="button">冲</button>
+      </div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

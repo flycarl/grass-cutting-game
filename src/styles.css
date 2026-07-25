@@ -1,0 +1,379 @@
+:root {
+  color: #263238;
+  background: #77c96d;
+  font-family:
+    "Avenir Next",
+    "PingFang SC",
+    "Microsoft YaHei",
+    system-ui,
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  min-width: 320px;
+}
+
+button {
+  font: inherit;
+}
+
+#app {
+  position: relative;
+}
+
+#game-canvas {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  outline: none;
+  touch-action: none;
+}
+
+#hud {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  left: max(12px, env(safe-area-inset-left));
+  right: max(82px, env(safe-area-inset-right));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  color: #fff8df;
+}
+
+.meter-cluster,
+.hud-pill,
+#weapon-name,
+#skill-value,
+#status-line {
+  border: 2px solid rgba(38, 50, 56, 0.22);
+  background: rgba(38, 50, 56, 0.76);
+  box-shadow: 0 8px 0 rgba(38, 50, 56, 0.18);
+  backdrop-filter: blur(8px);
+}
+
+.meter-cluster {
+  width: 190px;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+
+.meter-row {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.meter-row + .meter-row {
+  margin-top: 6px;
+}
+
+.meter-track {
+  height: 12px;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.32);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.meter-fill {
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 120ms ease-out;
+}
+
+.meter-fill.health {
+  width: 100%;
+  background: #ff4f5e;
+}
+
+.meter-fill.stamina {
+  width: 100%;
+  background: #ffe066;
+}
+
+.meter-fill.xp {
+  background: #49dcb1;
+}
+
+.hud-pill {
+  min-width: 70px;
+  height: 48px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.hud-pill span {
+  display: block;
+  color: rgba(255, 248, 223, 0.72);
+  font-size: 0.64rem;
+  font-weight: 900;
+}
+
+.hud-pill strong {
+  display: block;
+  font-size: 1.05rem;
+  line-height: 1.25;
+}
+
+#weapon-name,
+#skill-value,
+#status-line {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+#weapon-name {
+  min-width: 120px;
+  border-bottom-width: 5px;
+}
+
+#skill-value {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#status-line {
+  color: #ffe066;
+}
+
+#top-actions {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  display: flex;
+  gap: 8px;
+}
+
+#top-actions button {
+  width: 42px;
+  aspect-ratio: 1;
+  border: 2px solid rgba(38, 50, 56, 0.28);
+  border-radius: 8px;
+  color: #263238;
+  background: #fff8df;
+  box-shadow: 0 5px 0 rgba(38, 50, 56, 0.22);
+  font-weight: 950;
+  cursor: pointer;
+}
+
+#overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(38, 50, 56, 0.26);
+}
+
+#overlay[hidden] {
+  display: none;
+}
+
+.overlay-panel {
+  width: min(760px, 100%);
+  padding: 18px;
+  border: 3px solid rgba(38, 50, 56, 0.35);
+  border-radius: 8px;
+  background: #fff8df;
+  box-shadow: 0 14px 0 rgba(38, 50, 56, 0.24);
+}
+
+.overlay-panel h1 {
+  margin: 0 0 14px;
+  color: #263238;
+  font-size: 1.55rem;
+  line-height: 1.15;
+}
+
+.choice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.choice-button {
+  min-height: 130px;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 10px;
+  padding: 14px;
+  border: 3px solid #49dcb1;
+  border-radius: 8px;
+  color: #263238;
+  background: #ffffff;
+  box-shadow: 0 7px 0 rgba(38, 50, 56, 0.18);
+  text-align: left;
+  cursor: pointer;
+}
+
+.choice-button:hover,
+.choice-button:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 9px 0 rgba(38, 50, 56, 0.18);
+}
+
+.choice-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: #fff8df;
+  background: #263238;
+  font-weight: 950;
+}
+
+.choice-copy strong,
+.choice-copy small {
+  display: block;
+}
+
+.choice-copy strong {
+  margin-bottom: 5px;
+  font-size: 1rem;
+}
+
+.choice-copy small {
+  color: #5a686d;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.choice-meta {
+  color: #d94f35;
+  font-size: 0.76rem;
+  font-weight: 950;
+}
+
+#touch-controls {
+  position: absolute;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  left: max(18px, env(safe-area-inset-left));
+  display: none;
+  justify-content: space-between;
+  align-items: flex-end;
+  pointer-events: none;
+}
+
+#touch-stick {
+  position: relative;
+  width: clamp(96px, 24vw, 132px);
+  aspect-ratio: 1;
+  border: 3px solid rgba(38, 50, 56, 0.28);
+  border-radius: 50%;
+  background: rgba(255, 248, 223, 0.62);
+  pointer-events: auto;
+  touch-action: none;
+}
+
+#touch-knob {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 42%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #ffe066;
+  box-shadow: 0 5px 0 rgba(38, 50, 56, 0.22);
+  transform: translate(-50%, -50%);
+}
+
+#dash-button {
+  width: clamp(70px, 17vw, 88px);
+  aspect-ratio: 1;
+  border: 3px solid rgba(38, 50, 56, 0.28);
+  border-radius: 50%;
+  color: #263238;
+  background: #49dcb1;
+  box-shadow: 0 7px 0 rgba(38, 50, 56, 0.2);
+  font-size: 1.25rem;
+  font-weight: 950;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+@media (max-width: 980px) {
+  #hud {
+    right: max(12px, env(safe-area-inset-right));
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .meter-cluster {
+    width: 170px;
+  }
+
+  #skill-value,
+  #status-line {
+    display: none;
+  }
+}
+
+@media (pointer: coarse), (max-width: 760px) {
+  #touch-controls {
+    display: flex;
+  }
+
+  #hud {
+    gap: 6px;
+  }
+
+  .meter-cluster {
+    width: min(168px, 52vw);
+  }
+
+  .hud-pill {
+    min-width: 58px;
+    height: 44px;
+    padding: 5px 6px;
+  }
+
+  #weapon-name {
+    min-width: 104px;
+    height: 44px;
+    font-size: 0.74rem;
+  }
+
+  .choice-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .choice-button {
+    min-height: 98px;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  .choice-meta {
+    grid-column: 2;
+  }
+}
