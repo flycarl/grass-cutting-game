@@ -11,6 +11,7 @@ interface ThreeGameDiagnostics {
   kills: number;
   survived: number;
   enemies: number;
+  enemyKinds: Record<string, number>;
   projectiles: number;
   scheduledShots: number;
   xpOrbs: number;

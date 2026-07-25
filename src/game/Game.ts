@@ -43,6 +43,7 @@ type Skill = {
 };
 
 type Enemy = {
+  kind: EnemyKind;
   mesh: THREE.Group;
   hp: number;
   maxHp: number;
@@ -51,6 +52,18 @@ type Enemy = {
   xp: number;
   stunTimer: number;
   knockback: THREE.Vector3;
+};
+
+type EnemyKind = 'normal' | 'runner' | 'brute';
+
+type EnemyConfig = {
+  kind: EnemyKind;
+  color: string;
+  hp: number;
+  speed: number;
+  radius: number;
+  xp: number;
+  scale: THREE.Vector3Tuple;
 };
 
 type Projectile = {
@@ -88,6 +101,36 @@ const MAX_STAMINA = 100;
 const ROLL_COST = 35;
 const ROLL_DURATION = 0.28;
 const ROLL_SPEED = 16;
+
+const ENEMY_CONFIGS: Record<EnemyKind, EnemyConfig> = {
+  normal: {
+    kind: 'normal',
+    color: '#ff7b54',
+    hp: 18,
+    speed: 1.55,
+    radius: 0.5,
+    xp: 2,
+    scale: [1, 0.78, 0.95],
+  },
+  runner: {
+    kind: 'runner',
+    color: '#f23b3b',
+    hp: 12,
+    speed: 2.65,
+    radius: 0.42,
+    xp: 2,
+    scale: [0.82, 0.65, 0.82],
+  },
+  brute: {
+    kind: 'brute',
+    color: '#4caf50',
+    hp: 46,
+    speed: 0.92,
+    radius: 0.74,
+    xp: 5,
+    scale: [1.42, 1.05, 1.32],
+  },
+};
 
 const WEAPONS: Weapon[] = [
   {
@@ -599,7 +642,8 @@ export class Game {
   private spawnEnemy(): void {
     const angle = Math.random() * Math.PI * 2;
     const radius = 17 + Math.random() * 4;
-    const mesh = this.createEnemyMesh();
+    const config = this.pickEnemyConfig();
+    const mesh = this.createEnemyMesh(config);
     mesh.position.set(
       this.player.position.x + Math.sin(angle) * radius,
       0,
@@ -607,16 +651,26 @@ export class Game {
     );
     const difficulty = 1 + this.survived / 80;
     this.enemies.push({
+      kind: config.kind,
       mesh,
-      hp: 26 * difficulty,
-      maxHp: 26 * difficulty,
-      speed: 1.45 + Math.random() * 0.65 + this.survived * 0.004,
-      radius: 0.55,
-      xp: 2 + Math.floor(this.survived / 35),
+      hp: config.hp * difficulty,
+      maxHp: config.hp * difficulty,
+      speed: config.speed + Math.random() * 0.18 + this.survived * 0.004,
+      radius: config.radius,
+      xp: config.xp + Math.floor(this.survived / 35),
       stunTimer: 0,
       knockback: new THREE.Vector3(),
     });
     this.scene.add(mesh);
+  }
+
+  private pickEnemyConfig(): EnemyConfig {
+    const roll = Math.random();
+    const runnerChance = Math.min(0.34, 0.16 + this.survived * 0.002);
+    const bruteChance = Math.min(0.22, 0.08 + this.survived * 0.0012);
+    if (roll < runnerChance) return ENEMY_CONFIGS.runner;
+    if (roll < runnerChance + bruteChance) return ENEMY_CONFIGS.brute;
+    return ENEMY_CONFIGS.normal;
   }
 
   private spawnProjectile(angle: number, damageMultiplier = 1, pierceBonus = 0, color = this.selectedWeapon.color): void {
@@ -845,14 +899,14 @@ export class Game {
     return group;
   }
 
-  private createEnemyMesh(): THREE.Group {
+  private createEnemyMesh(config: EnemyConfig): THREE.Group {
     const group = new THREE.Group();
     const body = new THREE.Mesh(
       new THREE.SphereGeometry(0.52, 16, 12),
-      new THREE.MeshStandardMaterial({ color: '#ff7b54', roughness: 0.65 }),
+      new THREE.MeshStandardMaterial({ color: config.color, roughness: 0.65 }),
     );
-    body.scale.set(1.1, 0.82, 1);
-    body.position.y = 0.52;
+    body.scale.set(config.scale[0], config.scale[1], config.scale[2]);
+    body.position.y = 0.5 * config.scale[1] + 0.12;
     body.castShadow = true;
     group.add(body);
 
@@ -860,7 +914,7 @@ export class Game {
       new THREE.BoxGeometry(0.5, 0.12, 0.08),
       new THREE.MeshStandardMaterial({ color: '#311d1d' }),
     );
-    face.position.set(0, 0.62, -0.45);
+    face.position.set(0, body.position.y + 0.1, -0.43 * config.scale[2]);
     group.add(face);
     return group;
   }
@@ -903,6 +957,7 @@ export class Game {
       kills: this.kills,
       survived: this.survived,
       enemies: this.enemies.length,
+      enemyKinds: this.enemyKindCounts(),
       projectiles: this.projectiles.length,
       scheduledShots: this.scheduledShots.length,
       xpOrbs: this.xpOrbs.length,
@@ -931,5 +986,15 @@ export class Game {
     const element = document.querySelector<HTMLElement>(selector);
     if (!element) throw new Error(`Missing element: ${selector}`);
     return element;
+  }
+
+  private enemyKindCounts(): Record<EnemyKind, number> {
+    return this.enemies.reduce<Record<EnemyKind, number>>(
+      (counts, enemy) => {
+        counts[enemy.kind] += 1;
+        return counts;
+      },
+      { normal: 0, runner: 0, brute: 0 },
+    );
   }
 }
