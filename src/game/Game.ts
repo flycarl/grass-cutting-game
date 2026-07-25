@@ -209,6 +209,10 @@ export class Game {
   private readonly healthOrbs: HealthOrb[] = [];
   private readonly hammerMeshes: THREE.Mesh[] = [];
   private readonly reusableVector = new THREE.Vector3();
+  private readonly aimNdc = new THREE.Vector2();
+  private readonly aimPoint = new THREE.Vector3(0, 0, -1);
+  private readonly aimRaycaster = new THREE.Raycaster();
+  private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   private readonly skillLevels = new Map<SkillId, number>();
 
   private mode: GameMode = 'weapon-select';
@@ -323,6 +327,7 @@ export class Game {
     if (this.mode === 'playing') {
       this.survived += delta;
       this.hitCooldown = Math.max(0, this.hitCooldown - delta);
+      this.updateAim();
       this.updatePlayer(delta, elapsed);
       this.updateSpawning(delta);
       this.updateEnemies(delta, elapsed);
@@ -385,8 +390,25 @@ export class Game {
     } else {
       this.player.rotation.z = 0;
     }
-    if (move.lengthSq() > 0.01) this.player.rotation.y = Math.atan2(move.x, -move.y);
+    if (this.input.readAimNdc(this.aimNdc)) {
+      this.player.rotation.y = this.aimAngle;
+    } else if (move.lengthSq() > 0.01) {
+      this.player.rotation.y = Math.atan2(move.x, -move.y);
+    }
     this.player.position.y = Math.sin(elapsed * 8) * 0.04;
+  }
+
+  private updateAim(): void {
+    const pointerAim = this.input.readAimNdc(this.aimNdc);
+    if (pointerAim) {
+      this.aimRaycaster.setFromCamera(pointerAim, this.camera);
+      const hit = this.aimRaycaster.ray.intersectPlane(this.groundPlane, this.aimPoint);
+      if (hit && hit.distanceToSquared(this.player.position) > 0.05) {
+        this.aimAngle = Math.atan2(hit.x - this.player.position.x, hit.z - this.player.position.z);
+        return;
+      }
+    }
+    this.aimAngle = this.player.rotation.y;
   }
 
   private updateSpawning(delta: number): void {
@@ -435,18 +457,19 @@ export class Game {
   private updateShooting(delta: number): void {
     this.fireTimer -= delta;
     const fireRate = this.selectedWeapon.fireRate * (1 + this.skillLevel('rapid') * 0.09);
-    if (this.fireTimer > 0 || this.enemies.length === 0) return;
+    const singleShot = this.selectedWeapon.id === 'sprout-rifle' || this.selectedWeapon.id === 'bubble-shotgun';
+    if (this.fireTimer > 0) return;
+    const wantsFire = singleShot ? this.input.consumeFirePress() : this.input.isFireHeld();
+    if (!wantsFire) return;
     this.fireTimer = 1 / fireRate;
-    const target = this.findNearestEnemy();
-    if (!target) return;
 
-    const baseAngle = Math.atan2(target.mesh.position.x - this.player.position.x, target.mesh.position.z - this.player.position.z);
+    const baseAngle = this.aimAngle;
     this.aimAngle = baseAngle;
     const extraPellets = Math.floor(this.skillLevel('multi') / 3);
     if (this.selectedWeapon.id === 'sprout-rifle') {
-      const burstCount = 3 + Math.floor(extraPellets / 2);
+      const burstCount = 5 + extraPellets;
       for (let i = 0; i < burstCount; i += 1) {
-        const offset = i % 2 === 0 ? 0 : (i % 4 === 1 ? -1 : 1) * this.selectedWeapon.spread;
+        const offset = (i - (burstCount - 1) / 2) * this.selectedWeapon.spread;
         this.scheduledShots.push({
           timer: i * 0.055,
           angle: baseAngle + offset,
@@ -741,19 +764,6 @@ export class Game {
     const crit = luckyLevel > 0 && Math.random() < 0.04 + luckyLevel * 0.012;
     const damage = this.selectedWeapon.damage * (1 + this.skillLevel('damage') * 0.13);
     return crit ? damage * 2.2 : damage;
-  }
-
-  private findNearestEnemy(): Enemy | null {
-    let nearest: Enemy | null = null;
-    let nearestDistance = Infinity;
-    for (const enemy of this.enemies) {
-      const distance = enemy.mesh.position.distanceToSquared(this.player.position);
-      if (distance < nearestDistance) {
-        nearest = enemy;
-        nearestDistance = distance;
-      }
-    }
-    return nearest;
   }
 
   private skillChoices(): SkillChoiceView[] {

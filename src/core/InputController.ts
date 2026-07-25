@@ -24,6 +24,8 @@ export class InputController {
 
   private dashDown = false;
   private rollRequested = false;
+  private fireHeld = false;
+  private firePressed = false;
 
   private readonly onKeyDown = (event: KeyboardEvent) => {
     this.keys.add(event.code);
@@ -91,6 +93,19 @@ export class InputController {
     this.hasPointerAim = true;
   };
 
+  private readonly onFireDown = (event: PointerEvent) => {
+    if (event.button !== 0 || event.pointerType === 'touch') return;
+    event.preventDefault();
+    this.onAimMove(event);
+    this.fireHeld = true;
+    this.firePressed = true;
+  };
+
+  private readonly onFireUp = (event: PointerEvent) => {
+    if (event.button !== 0 || event.pointerType === 'touch') return;
+    this.fireHeld = false;
+  };
+
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly stick: HTMLElement,
@@ -100,6 +115,8 @@ export class InputController {
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
     this.canvas.addEventListener('pointermove', this.onAimMove);
+    this.canvas.addEventListener('pointerdown', this.onFireDown);
+    window.addEventListener('pointerup', this.onFireUp);
     this.stick.addEventListener('pointerdown', this.onStickDown);
     this.stick.addEventListener('pointermove', this.onStickMove);
     this.stick.addEventListener('pointerup', this.onStickUp);
@@ -132,6 +149,16 @@ export class InputController {
     return requested;
   }
 
+  isFireHeld(): boolean {
+    return this.fireHeld;
+  }
+
+  consumeFirePress(): boolean {
+    const pressed = this.firePressed;
+    this.firePressed = false;
+    return pressed;
+  }
+
   readAimNdc(target: THREE.Vector2): THREE.Vector2 | null {
     if (!this.hasPointerAim) return null;
     return target.copy(this.aimNdc);
@@ -141,6 +168,8 @@ export class InputController {
     window.removeEventListener('keydown', this.onKeyDown);
     window.removeEventListener('keyup', this.onKeyUp);
     this.canvas.removeEventListener('pointermove', this.onAimMove);
+    this.canvas.removeEventListener('pointerdown', this.onFireDown);
+    window.removeEventListener('pointerup', this.onFireUp);
     this.stick.removeEventListener('pointerdown', this.onStickDown);
     this.stick.removeEventListener('pointermove', this.onStickMove);
     this.stick.removeEventListener('pointerup', this.onStickUp);
