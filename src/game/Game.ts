@@ -45,6 +45,7 @@ type Skill = {
 type Enemy = {
   kind: EnemyKind;
   mesh: THREE.Group;
+  healthFill: THREE.Mesh;
   hp: number;
   maxHp: number;
   speed: number;
@@ -439,6 +440,7 @@ export class Game {
       }
       enemy.mesh.rotation.y = Math.atan2(direction.x, direction.z);
       enemy.mesh.position.y = 0.08 + Math.sin(elapsed * (enemy.stunTimer > 0 ? 18 : 7) + i) * (enemy.stunTimer > 0 ? 0.025 : 0.05);
+      this.updateEnemyHealthBar(enemy);
 
       if (distance < enemy.radius + PLAYER_RADIUS && this.hitCooldown <= 0 && this.rollTimer <= 0) {
         this.health -= 12;
@@ -457,13 +459,13 @@ export class Game {
   private updateShooting(delta: number): void {
     this.fireTimer -= delta;
     const fireRate = this.selectedWeapon.fireRate * (1 + this.skillLevel('rapid') * 0.09);
-    const singleShot = this.selectedWeapon.id === 'sprout-rifle' || this.selectedWeapon.id === 'bubble-shotgun';
-    if (this.fireTimer > 0) return;
-    const wantsFire = singleShot ? this.input.consumeFirePress() : this.input.isFireHeld();
-    if (!wantsFire) return;
+    if (this.fireTimer > 0 || this.enemies.length === 0) return;
     this.fireTimer = 1 / fireRate;
 
-    const baseAngle = this.aimAngle;
+    const target = this.findNearestEnemy();
+    if (!target) return;
+
+    const baseAngle = Math.atan2(target.mesh.position.x - this.player.position.x, target.mesh.position.z - this.player.position.z);
     this.aimAngle = baseAngle;
     const extraPellets = Math.floor(this.skillLevel('multi') / 3);
     if (this.selectedWeapon.id === 'sprout-rifle') {
@@ -666,7 +668,8 @@ export class Game {
     const angle = Math.random() * Math.PI * 2;
     const radius = 17 + Math.random() * 4;
     const config = this.pickEnemyConfig();
-    const mesh = this.createEnemyMesh(config);
+    const visual = this.createEnemyMesh(config);
+    const mesh = visual.group;
     mesh.position.set(
       this.player.position.x + Math.sin(angle) * radius,
       0,
@@ -676,6 +679,7 @@ export class Game {
     this.enemies.push({
       kind: config.kind,
       mesh,
+      healthFill: visual.healthFill,
       hp: config.hp * difficulty,
       maxHp: config.hp * difficulty,
       speed: config.speed + Math.random() * 0.18 + this.survived * 0.004,
@@ -748,10 +752,18 @@ export class Game {
     enemy.knockback.clampLength(0, 12);
   }
 
+  private updateEnemyHealthBar(enemy: Enemy): void {
+    const healthRatio = THREE.MathUtils.clamp(enemy.hp / enemy.maxHp, 0, 1);
+    enemy.healthFill.scale.x = healthRatio;
+    const bar = enemy.mesh.getObjectByName('health-bar');
+    if (bar) bar.lookAt(this.camera.position);
+  }
+
   private damageEnemy(enemy: Enemy, damage: number): void {
     const luckyLevel = this.skillLevel('lucky');
     const crit = luckyLevel > 0 && Math.random() < 0.04 + luckyLevel * 0.012;
     enemy.hp -= crit ? damage * 2.2 : damage;
+    this.updateEnemyHealthBar(enemy);
     this.flashEnemy(enemy.mesh);
     if (enemy.hp <= 0) {
       const index = this.enemies.indexOf(enemy);
@@ -764,6 +776,19 @@ export class Game {
     const crit = luckyLevel > 0 && Math.random() < 0.04 + luckyLevel * 0.012;
     const damage = this.selectedWeapon.damage * (1 + this.skillLevel('damage') * 0.13);
     return crit ? damage * 2.2 : damage;
+  }
+
+  private findNearestEnemy(): Enemy | null {
+    let nearest: Enemy | null = null;
+    let nearestDistance = Infinity;
+    for (const enemy of this.enemies) {
+      const distance = enemy.mesh.position.distanceToSquared(this.player.position);
+      if (distance < nearestDistance) {
+        nearest = enemy;
+        nearestDistance = distance;
+      }
+    }
+    return nearest;
   }
 
   private skillChoices(): SkillChoiceView[] {
@@ -909,7 +934,7 @@ export class Game {
     return group;
   }
 
-  private createEnemyMesh(config: EnemyConfig): THREE.Group {
+  private createEnemyMesh(config: EnemyConfig): { group: THREE.Group; healthFill: THREE.Mesh } {
     const group = new THREE.Group();
     const body = new THREE.Mesh(
       new THREE.SphereGeometry(0.52, 16, 12),
@@ -926,7 +951,26 @@ export class Game {
     );
     face.position.set(0, body.position.y + 0.1, -0.43 * config.scale[2]);
     group.add(face);
-    return group;
+
+    const bar = new THREE.Group();
+    bar.name = 'health-bar';
+    bar.position.set(0, body.position.y + 0.7, 0);
+    const barBack = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.92, 0.1),
+      new THREE.MeshBasicMaterial({ color: '#263238', depthTest: false }),
+    );
+    const healthFill = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.84, 0.064),
+      new THREE.MeshBasicMaterial({ color: '#7dff6a', depthTest: false }),
+    );
+    healthFill.name = 'health-fill';
+    healthFill.position.set(-0.42, 0, 0.004);
+    healthFill.scale.x = 1;
+    healthFill.geometry.translate(0.42, 0, 0);
+    bar.add(barBack, healthFill);
+    group.add(bar);
+
+    return { group, healthFill };
   }
 
   private createXpOrb(position: THREE.Vector3, value: number): XpOrb {

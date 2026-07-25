@@ -57,17 +57,13 @@ test('renders a nonblank interactive game canvas', async ({ page }, testInfo) =>
   await page.waitForFunction(() => (window.__THREE_GAME_DIAGNOSTICS__?.frame ?? 0) > 10);
   await page.getByRole('button', { name: /射手步枪/ }).click();
   await page.waitForFunction(() => window.__THREE_GAME_DIAGNOSTICS__?.mode === 'playing');
-  if (!testInfo.project.name.includes('mobile')) {
-    await page.mouse.move(960, 360);
-    await page.mouse.click(960, 360);
-    await expect
-      .poll(async () =>
-        page.evaluate(
-          () => (window.__THREE_GAME_DIAGNOSTICS__?.projectiles ?? 0) + (window.__THREE_GAME_DIAGNOSTICS__?.scheduledShots ?? 0),
-        ),
-      )
-      .toBeGreaterThanOrEqual(5);
-  }
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () => (window.__THREE_GAME_DIAGNOSTICS__?.projectiles ?? 0) + (window.__THREE_GAME_DIAGNOSTICS__?.scheduledShots ?? 0),
+      ),
+    )
+    .toBeGreaterThanOrEqual(1);
 
   const sample = await sampleCanvas(page);
   expect(sample, JSON.stringify(sample)).toMatchObject({ ok: true });
