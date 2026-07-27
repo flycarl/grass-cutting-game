@@ -85,6 +85,7 @@ type EnemyProjectile = {
   damage: number;
   age: number;
   radius: number;
+  deflected: boolean;
 };
 
 type ScheduledShot = {
@@ -270,6 +271,8 @@ export class Game {
   private spawnTimer = 0;
   private bossTimer = 18;
   private bossSpawnCount = 0;
+  private waveNumber = 0;
+  private waveWasAboveThreshold = false;
   private fireTimer = 0;
   private lightningTimer = 1.2;
   private auraTimer = 0;
@@ -280,6 +283,7 @@ export class Game {
   private lowestEnemyHealthRatioSeen = 1;
   private frame = 0;
   private readonly rollDirection = new THREE.Vector3(0, 0, -1);
+  private readonly playerKnockback = new THREE.Vector3();
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = createRenderer(canvas);
@@ -357,12 +361,15 @@ export class Game {
     this.spawnTimer = 0;
     this.bossTimer = 18;
     this.bossSpawnCount = 0;
+    this.waveNumber = 0;
+    this.waveWasAboveThreshold = false;
     this.fireTimer = 0;
     this.lightningTimer = 1.2;
     this.auraTimer = 0;
     this.hitCooldown = 0;
     this.rollTimer = 0;
     this.rollCooldown = 0;
+    this.playerKnockback.set(0, 0, 0);
     this.lowestEnemyHealthRatioSeen = 1;
     this.skillLevels.clear();
     this.mode = 'weapon-select';
@@ -442,6 +449,8 @@ export class Game {
     } else {
       this.player.rotation.z = 0;
     }
+    this.player.position.addScaledVector(this.playerKnockback, delta);
+    this.playerKnockback.multiplyScalar(Math.exp(-9 * delta));
     if (this.input.readAimNdc(this.aimNdc)) {
       this.player.rotation.y = this.aimAngle;
     } else if (move.lengthSq() > 0.01) {
@@ -471,10 +480,18 @@ export class Game {
       this.bossTimer = Math.max(26, 38 - this.survived * 0.04);
     }
     const interval = Math.max(0.22, 1.1 - this.survived * 0.01);
-    if (this.spawnTimer > 0) return;
+    const shouldStartNextWave =
+      this.enemies.length === 0 ||
+      (this.enemies.length <= 5 && (this.waveWasAboveThreshold || this.spawnTimer <= 0));
+    if (!shouldStartNextWave) {
+      this.waveWasAboveThreshold ||= this.enemies.length > 5;
+      return;
+    }
     this.spawnTimer = interval;
-    const count = 1 + Math.floor(this.survived / 28);
+    this.waveNumber += 1;
+    const count = 6 + Math.floor(this.survived / 24) + Math.floor(this.waveNumber / 3);
     for (let i = 0; i < count; i += 1) this.spawnEnemy();
+    this.waveWasAboveThreshold = this.enemies.length > 5;
   }
 
   private updateEnemies(delta: number, elapsed: number): void {
@@ -500,15 +517,7 @@ export class Game {
       this.updateEnemyHealthBar(enemy);
 
       if (distance < enemy.radius + PLAYER_RADIUS && this.hitCooldown <= 0 && this.rollTimer <= 0) {
-        this.health -= 12;
-        this.hitCooldown = 0.55;
-        this.audio.hit();
-        this.hud.flashDamage();
-        if (this.health <= 0) {
-          this.health = 0;
-          this.mode = 'game-over';
-          this.hud.showGameOver(this.kills, this.survived);
-        }
+        this.damagePlayer(12, this.player.position.clone().sub(enemy.mesh.position), 8.5);
       }
     }
   }
@@ -639,24 +648,34 @@ export class Game {
       projectile.age += delta;
       projectile.mesh.position.addScaledVector(projectile.velocity, delta);
       projectile.mesh.rotation.y += delta * 8;
-      const dx = projectile.mesh.position.x - this.player.position.x;
-      const dz = projectile.mesh.position.z - this.player.position.z;
-      const hitRadius = projectile.radius + PLAYER_RADIUS;
-      const hitPlayer = dx * dx + dz * dz < hitRadius * hitRadius;
-      if (hitPlayer && this.hitCooldown <= 0) {
-        this.health -= projectile.damage;
-        this.hitCooldown = 0.5;
-        this.audio.hit();
-        this.hud.flashDamage();
+      let remove = projectile.age > (projectile.deflected ? 3.2 : 4);
+
+      if (projectile.deflected) {
+        for (let j = this.enemies.length - 1; j >= 0; j -= 1) {
+          const enemy = this.enemies[j];
+          if (enemy.isBoss) continue;
+          const hitRadius = projectile.radius + enemy.radius;
+          const dx = projectile.mesh.position.x - enemy.mesh.position.x;
+          const dz = projectile.mesh.position.z - enemy.mesh.position.z;
+          if (dx * dx + dz * dz > hitRadius * hitRadius) continue;
+          this.damageEnemy(enemy, projectile.damage * 1.7);
+          remove = true;
+          break;
+        }
+      } else {
+        const dx = projectile.mesh.position.x - this.player.position.x;
+        const dz = projectile.mesh.position.z - this.player.position.z;
+        const hitRadius = projectile.radius + PLAYER_RADIUS;
+        const hitPlayer = dx * dx + dz * dz < hitRadius * hitRadius;
+        if (hitPlayer && this.hitCooldown <= 0) {
+          this.damagePlayer(projectile.damage, this.player.position.clone().sub(projectile.mesh.position), 7.5);
+        }
+        remove ||= hitPlayer;
       }
-      if (hitPlayer || projectile.age > 4) {
+
+      if (remove) {
         this.scene.remove(projectile.mesh);
         this.enemyProjectiles.splice(i, 1);
-      }
-      if (this.health <= 0) {
-        this.health = 0;
-        this.mode = 'game-over';
-        this.hud.showGameOver(this.kills, this.survived);
       }
     }
   }
@@ -747,6 +766,12 @@ export class Game {
         this.player.position.z + Math.cos(angle) * orbitRadius,
       );
       hammer.rotation.set(0.4, angle, elapsed * 7);
+      for (const projectile of this.enemyProjectiles) {
+        if (projectile.deflected) continue;
+        if (hammer.position.distanceTo(projectile.mesh.position) < projectile.radius + 0.62) {
+          this.deflectEnemyProjectile(projectile, hammer.position);
+        }
+      }
       for (const enemy of this.enemies) {
         if (hammer.position.distanceTo(enemy.mesh.position) < enemy.radius + 0.55) {
           this.damageEnemy(enemy, (18 + level * 3) * delta * 3.2);
@@ -929,6 +954,7 @@ export class Game {
       damage,
       age: 0,
       radius,
+      deflected: false,
     });
     this.scene.add(mesh);
   }
@@ -950,6 +976,43 @@ export class Game {
 
   private heal(amount: number): void {
     this.health = Math.min(100, this.health + amount);
+  }
+
+  private damagePlayer(amount: number, direction: THREE.Vector3, force: number): void {
+    this.health -= amount;
+    this.hitCooldown = 0.55;
+    direction.y = 0;
+    if (direction.lengthSq() < 0.001) {
+      direction.set(Math.sin(this.aimAngle), 0, Math.cos(this.aimAngle));
+    }
+    direction.normalize();
+    this.playerKnockback.addScaledVector(direction, force);
+    this.playerKnockback.clampLength(0, 16);
+    this.audio.hit();
+    this.hud.flashDamage();
+    if (this.health <= 0) {
+      this.health = 0;
+      this.mode = 'game-over';
+      this.hud.showGameOver(this.kills, this.survived);
+    }
+  }
+
+  private deflectEnemyProjectile(projectile: EnemyProjectile, hammerPosition: THREE.Vector3): void {
+    const direction = projectile.mesh.position.clone().sub(hammerPosition);
+    direction.y = 0;
+    if (direction.lengthSq() < 0.001) {
+      direction.copy(projectile.velocity).multiplyScalar(-1);
+    }
+    direction.normalize();
+    projectile.deflected = true;
+    projectile.age = 0;
+    projectile.velocity.copy(direction.multiplyScalar(15));
+    projectile.damage *= 1.4;
+    projectile.radius *= 1.08;
+    const material = projectile.mesh.material as THREE.MeshStandardMaterial;
+    material.color.set('#ffe066');
+    material.emissive.set('#ff8a2b');
+    projectile.mesh.scale.setScalar(1.16);
   }
 
   private applyKnockback(enemy: Enemy, direction: THREE.Vector3, force: number): void {
@@ -1316,14 +1379,17 @@ export class Game {
       aimTargetIsBoss: this.findNearestEnemy()?.isBoss ?? false,
       enemyHealthRatios: this.enemies.map((enemy) => THREE.MathUtils.clamp(enemy.hp / enemy.maxHp, 0, 1)),
       lowestEnemyHealthRatioSeen: this.lowestEnemyHealthRatioSeen,
+      waveNumber: this.waveNumber,
       projectiles: this.projectiles.length,
       enemyProjectiles: this.enemyProjectiles.length,
+      deflectedEnemyProjectiles: this.enemyProjectiles.filter((projectile) => projectile.deflected).length,
       scheduledShots: this.scheduledShots.length,
       xpOrbs: this.xpOrbs.length,
       healthOrbs: this.healthOrbs.length,
       weapon: this.selectedWeapon.id,
       aimAngle: this.aimAngle,
       rolling: this.rollTimer > 0,
+      playerKnockback: this.playerKnockback.length(),
       skills: Object.fromEntries(this.skillLevels),
       player: {
         position: {

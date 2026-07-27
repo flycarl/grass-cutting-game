@@ -16,14 +16,17 @@ interface ThreeGameDiagnostics {
   aimTargetIsBoss: boolean;
   enemyHealthRatios: number[];
   lowestEnemyHealthRatioSeen: number;
+  waveNumber: number;
   projectiles: number;
   enemyProjectiles: number;
+  deflectedEnemyProjectiles: number;
   scheduledShots: number;
   xpOrbs: number;
   healthOrbs: number;
   weapon: string;
   aimAngle: number;
   rolling: boolean;
+  playerKnockback: number;
   skills: Record<string, number>;
   player: {
     position: { x: number; y: number; z: number };
