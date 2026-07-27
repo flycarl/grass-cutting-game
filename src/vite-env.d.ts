@@ -13,6 +13,7 @@ interface ThreeGameDiagnostics {
   enemies: number;
   enemyKinds: Record<string, number>;
   bosses: number;
+  aimTargetIsBoss: boolean;
   enemyHealthRatios: number[];
   lowestEnemyHealthRatioSeen: number;
   projectiles: number;

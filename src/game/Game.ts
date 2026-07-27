@@ -992,7 +992,9 @@ export class Game {
   private findNearestEnemy(): Enemy | null {
     let nearest: Enemy | null = null;
     let nearestDistance = Infinity;
-    for (const enemy of this.enemies) {
+    const bosses = this.enemies.filter((enemy) => enemy.isBoss);
+    const candidates = bosses.length > 0 ? bosses : this.enemies;
+    for (const enemy of candidates) {
       const distance = enemy.mesh.position.distanceToSquared(this.player.position);
       if (distance < nearestDistance) {
         nearest = enemy;
@@ -1287,6 +1289,7 @@ export class Game {
       enemies: this.enemies.length,
       enemyKinds: this.enemyKindCounts(),
       bosses: this.enemies.filter((enemy) => enemy.isBoss).length,
+      aimTargetIsBoss: this.findNearestEnemy()?.isBoss ?? false,
       enemyHealthRatios: this.enemies.map((enemy) => THREE.MathUtils.clamp(enemy.hp / enemy.maxHp, 0, 1)),
       lowestEnemyHealthRatioSeen: this.lowestEnemyHealthRatioSeen,
       projectiles: this.projectiles.length,

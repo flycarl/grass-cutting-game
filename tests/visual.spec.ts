@@ -105,9 +105,14 @@ test('renders a nonblank interactive game canvas', async ({ page }, testInfo) =>
     .poll(async () => page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__?.player.position.z ?? 0))
     .toBeLessThan(before - 0.3);
   await resumeAfterLevelUp(page);
+  await page.waitForFunction(() => window.__THREE_GAME_DIAGNOSTICS__?.mode === 'playing');
 
   const staminaBeforeRoll = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__?.stamina ?? 100);
   await page.keyboard.press('Space');
+  await resumeAfterLevelUp(page);
+  if ((await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__?.stamina ?? 100)) >= staminaBeforeRoll - 1) {
+    await page.keyboard.press('Space');
+  }
   await expect
     .poll(async () => page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__?.stamina ?? 100))
     .toBeLessThan(staminaBeforeRoll - 10);
