@@ -12,6 +12,8 @@ interface ThreeGameDiagnostics {
   survived: number;
   enemies: number;
   enemyKinds: Record<string, number>;
+  enemyHealthRatios: number[];
+  lowestEnemyHealthRatioSeen: number;
   projectiles: number;
   scheduledShots: number;
   xpOrbs: number;

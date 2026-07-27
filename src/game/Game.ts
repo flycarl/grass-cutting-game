@@ -45,7 +45,7 @@ type Skill = {
 type Enemy = {
   kind: EnemyKind;
   mesh: THREE.Group;
-  healthFill: THREE.Mesh;
+  healthFill: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
   hp: number;
   maxHp: number;
   speed: number;
@@ -233,6 +233,7 @@ export class Game {
   private rollTimer = 0;
   private rollCooldown = 0;
   private aimAngle = 0;
+  private lowestEnemyHealthRatioSeen = 1;
   private frame = 0;
   private readonly rollDirection = new THREE.Vector3(0, 0, -1);
 
@@ -315,6 +316,7 @@ export class Game {
     this.hitCooldown = 0;
     this.rollTimer = 0;
     this.rollCooldown = 0;
+    this.lowestEnemyHealthRatioSeen = 1;
     this.skillLevels.clear();
     this.mode = 'weapon-select';
     this.hud.showWeaponSelect(this.weaponViews());
@@ -511,11 +513,12 @@ export class Game {
       let remove = projectile.age > 2.1;
       for (let j = this.enemies.length - 1; j >= 0; j -= 1) {
         const enemy = this.enemies[j];
-        if (projectile.mesh.position.distanceTo(enemy.mesh.position) > projectile.radius + enemy.radius) continue;
-        enemy.hp -= projectile.damage;
+        const hitRadius = projectile.radius + enemy.radius;
+        const dx = projectile.mesh.position.x - enemy.mesh.position.x;
+        const dz = projectile.mesh.position.z - enemy.mesh.position.z;
+        if (dx * dx + dz * dz > hitRadius * hitRadius) continue;
+        this.damageEnemy(enemy, projectile.damage);
         projectile.pierce -= 1;
-        this.flashEnemy(enemy.mesh);
-        if (enemy.hp <= 0) this.killEnemy(j);
         if (projectile.pierce < 0) {
           remove = true;
           break;
@@ -754,7 +757,9 @@ export class Game {
 
   private updateEnemyHealthBar(enemy: Enemy): void {
     const healthRatio = THREE.MathUtils.clamp(enemy.hp / enemy.maxHp, 0, 1);
+    this.lowestEnemyHealthRatioSeen = Math.min(this.lowestEnemyHealthRatioSeen, healthRatio);
     enemy.healthFill.scale.x = healthRatio;
+    enemy.healthFill.material.color.set(healthRatio > 0.55 ? '#7dff6a' : healthRatio > 0.25 ? '#ffd166' : '#ff5a5f');
     const bar = enemy.mesh.getObjectByName('health-bar');
     if (bar) bar.lookAt(this.camera.position);
   }
@@ -934,7 +939,10 @@ export class Game {
     return group;
   }
 
-  private createEnemyMesh(config: EnemyConfig): { group: THREE.Group; healthFill: THREE.Mesh } {
+  private createEnemyMesh(config: EnemyConfig): {
+    group: THREE.Group;
+    healthFill: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  } {
     const group = new THREE.Group();
     const body = new THREE.Mesh(
       new THREE.SphereGeometry(0.52, 16, 12),
@@ -1012,6 +1020,8 @@ export class Game {
       survived: this.survived,
       enemies: this.enemies.length,
       enemyKinds: this.enemyKindCounts(),
+      enemyHealthRatios: this.enemies.map((enemy) => THREE.MathUtils.clamp(enemy.hp / enemy.maxHp, 0, 1)),
+      lowestEnemyHealthRatioSeen: this.lowestEnemyHealthRatioSeen,
       projectiles: this.projectiles.length,
       scheduledShots: this.scheduledShots.length,
       xpOrbs: this.xpOrbs.length,

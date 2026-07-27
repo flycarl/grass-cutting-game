@@ -64,6 +64,9 @@ test('renders a nonblank interactive game canvas', async ({ page }, testInfo) =>
       ),
     )
     .toBeGreaterThanOrEqual(1);
+  await expect
+    .poll(async () => page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__?.lowestEnemyHealthRatioSeen ?? 1), { timeout: 15000 })
+    .toBeLessThan(0.98);
 
   const sample = await sampleCanvas(page);
   expect(sample, JSON.stringify(sample)).toMatchObject({ ok: true });
