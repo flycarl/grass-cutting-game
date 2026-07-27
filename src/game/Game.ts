@@ -180,7 +180,7 @@ const SKILLS: Skill[] = [
   { id: 'pierce', name: '穿透果冻', icon: '|', description: '子弹可穿透更多怪物' },
   { id: 'lightning', name: '跳跳落雷', icon: 'L', description: '定时劈向怪群，升级增加次数和伤害' },
   { id: 'hammers', name: '旋风大锤', icon: 'H', description: '身边生成环绕大锤，越升越多越猛' },
-  { id: 'aura', name: '蒜香泡泡', icon: 'A', description: '周围持续灼烧靠近的怪物' },
+  { id: 'aura', name: '蒜香泡泡', icon: 'A', description: '生成灼烧火圈，奇数级加范围，偶数级加伤害' },
   { id: 'frost', name: '冰沙领域', icon: 'F', description: '降低附近怪物速度，升级扩大范围' },
   { id: 'growth', name: '经验糖果', icon: 'X', description: '获得更多经验，更快触发技能选择' },
   { id: 'lucky', name: '幸运骰子', icon: '?', description: '偶尔暴击，并让掉落经验更丰厚' },
@@ -629,22 +629,41 @@ export class Game {
   private updateAura(delta: number): void {
     const level = this.skillLevel('aura');
     const aura = this.player.getObjectByName('aura-ring') as THREE.Mesh | undefined;
+    const flames = this.player.getObjectByName('aura-flames') as THREE.Group | undefined;
     if (level <= 0) {
       if (aura) aura.visible = false;
+      if (flames) flames.visible = false;
       return;
     }
     this.auraTimer += delta;
-    const radius = 1.8 + level * 0.18;
-    const damage = (5 + level * 1.5) * delta;
+    const rangeLevel = Math.ceil(level / 2);
+    const damageLevel = Math.floor(level / 2);
+    const radius = 1.75 + rangeLevel * 0.32;
+    const damage = (6 + damageLevel * 2.8) * delta;
     for (const enemy of this.enemies) {
-      if (enemy.mesh.position.distanceTo(this.player.position) < radius + enemy.radius) {
+      const dx = enemy.mesh.position.x - this.player.position.x;
+      const dz = enemy.mesh.position.z - this.player.position.z;
+      if (dx * dx + dz * dz < (radius + enemy.radius) ** 2) {
         this.damageEnemy(enemy, damage);
       }
     }
     if (aura) {
       aura.visible = true;
       aura.scale.setScalar(radius);
-      aura.rotation.z = this.auraTimer * 0.8;
+      aura.rotation.z = this.auraTimer * 1.15;
+      const material = aura.material as THREE.MeshBasicMaterial;
+      material.opacity = 0.34 + Math.sin(this.auraTimer * 8) * 0.08;
+    }
+    if (flames) {
+      flames.visible = true;
+      flames.children.forEach((flame, index) => {
+        const phase = this.auraTimer * 4.8 + index * 0.75;
+        const angle = (index / flames.children.length) * Math.PI * 2 + this.auraTimer * 0.55;
+        const flicker = 0.86 + Math.sin(phase) * 0.16;
+        flame.position.set(Math.sin(angle) * radius, 0.2 + Math.sin(phase * 1.7) * 0.045, Math.cos(angle) * radius);
+        flame.scale.setScalar(flicker);
+        flame.rotation.set(0, angle, Math.sin(phase) * 0.18);
+      });
     }
   }
 
@@ -928,14 +947,32 @@ export class Game {
     group.add(gun);
 
     const aura = new THREE.Mesh(
-      new THREE.RingGeometry(0.95, 1.05, 48),
-      new THREE.MeshBasicMaterial({ color: '#b6ff6a', transparent: true, opacity: 0.26 }),
+      new THREE.RingGeometry(0.9, 1.08, 64),
+      new THREE.MeshBasicMaterial({ color: '#ff8a2b', transparent: true, opacity: 0.34, depthWrite: false }),
     );
     aura.name = 'aura-ring';
     aura.rotation.x = -Math.PI / 2;
     aura.position.y = 0.04;
     aura.visible = false;
     group.add(aura);
+
+    const flames = new THREE.Group();
+    flames.name = 'aura-flames';
+    flames.visible = false;
+    for (let i = 0; i < 16; i += 1) {
+      const flame = new THREE.Mesh(
+        new THREE.ConeGeometry(0.08, 0.34, 5),
+        new THREE.MeshBasicMaterial({
+          color: i % 2 === 0 ? '#ff4f1f' : '#ffd166',
+          transparent: true,
+          opacity: 0.78,
+          depthWrite: false,
+        }),
+      );
+      flame.position.y = 0.2;
+      flames.add(flame);
+    }
+    group.add(flames);
     return group;
   }
 
