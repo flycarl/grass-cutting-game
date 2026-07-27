@@ -75,7 +75,7 @@ button {
 
 .meter-row {
   display: grid;
-  grid-template-columns: 30px 1fr;
+  grid-template-columns: 36px 1fr;
   align-items: center;
   gap: 8px;
   font-size: 0.72rem;

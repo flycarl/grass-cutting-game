@@ -7,6 +7,7 @@ type HudState = {
   xpNeeded: number;
   kills: number;
   survived: number;
+  waveNumber: number;
   enemies: number;
   skills: string;
   boss?: {
@@ -46,7 +47,7 @@ export class Hud {
   private readonly xpFill = this.getElement('#xp-fill');
   private readonly levelValue = this.getElement('#level-value');
   private readonly killValue = this.getElement('#kill-value');
-  private readonly timerValue = this.getElement('#timer-value');
+  private readonly waveValue = this.getElement('#wave-value');
   private readonly enemyValue = this.getElement('#enemy-value');
   private readonly skillValue = this.getElement('#skill-value');
   private readonly weaponName = this.getElement('#weapon-name');
@@ -72,9 +73,9 @@ export class Hud {
     this.xpFill.style.width = `${Math.min(100, (state.xp / state.xpNeeded) * 100)}%`;
     this.levelValue.textContent = String(state.level).padStart(2, '0');
     this.killValue.textContent = String(state.kills).padStart(3, '0');
+    this.waveValue.textContent = String(Math.max(1, state.waveNumber)).padStart(2, '0');
     this.enemyValue.textContent = String(state.enemies).padStart(2, '0');
     this.skillValue.textContent = state.skills;
-    this.timerValue.textContent = this.formatTime(state.survived);
     if (state.boss) {
       const percent = Math.max(0, Math.min(100, Math.round(state.boss.healthRatio * 100)));
       this.bossBar.hidden = false;

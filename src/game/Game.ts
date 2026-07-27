@@ -179,7 +179,7 @@ const WEAPONS: Weapon[] = [
   {
     id: 'sprout-rifle',
     name: '射手步枪',
-    icon: 'R',
+    icon: '苗',
     description: '精准三连发，自带穿透',
     fireRate: 2.35,
     projectileSpeed: 65,
@@ -191,7 +191,7 @@ const WEAPONS: Weapon[] = [
   {
     id: 'bubble-shotgun',
     name: '泡泡霰弹',
-    icon: 'B',
+    icon: '泡',
     description: '近距离扇形爆发',
     fireRate: 1.35,
     projectileSpeed: 52.5,
@@ -203,7 +203,7 @@ const WEAPONS: Weapon[] = [
   {
     id: 'star-smg',
     name: '星星冲锋枪',
-    icon: 'S',
+    icon: '星',
     description: '高射速，持续削怪',
     fireRate: 5.6,
     projectileSpeed: 60,
@@ -215,18 +215,18 @@ const WEAPONS: Weapon[] = [
 ];
 
 const SKILLS: Skill[] = [
-  { id: 'rapid', name: '连发机关', icon: '>>', description: '射速提升，重复选择继续升级' },
-  { id: 'damage', name: '糖果弹头', icon: '+', description: '子弹伤害提升' },
-  { id: 'multi', name: '双手开花', icon: '*', description: '额外发射子弹' },
-  { id: 'speed', name: '溜冰鞋', icon: '^', description: '移动速度提升' },
-  { id: 'pierce', name: '穿透果冻', icon: '|', description: '子弹可穿透更多怪物' },
-  { id: 'lightning', name: '跳跳落雷', icon: 'L', description: '定时劈向怪群，升级增加次数和伤害' },
-  { id: 'hammers', name: '旋风大锤', icon: 'H', description: '身边生成环绕大锤，越升越多越猛' },
-  { id: 'aura', name: '蒜香泡泡', icon: 'A', description: '生成灼烧火圈，奇数级加范围，偶数级加伤害' },
-  { id: 'frost', name: '冰沙领域', icon: 'F', description: '降低附近怪物速度，升级扩大范围' },
-  { id: 'growth', name: '经验糖果', icon: 'X', description: '获得更多经验，更快触发技能选择' },
-  { id: 'lucky', name: '幸运骰子', icon: '?', description: '偶尔暴击，并让掉落经验更丰厚' },
-  { id: 'regen', name: '草莓药瓶', icon: '+HP', description: '持续缓慢回血，升级后回复更快' },
+  { id: 'rapid', name: '连发机关', icon: '速', description: '射速提升，重复选择继续升级' },
+  { id: 'damage', name: '糖果弹头', icon: '弹', description: '子弹伤害提升' },
+  { id: 'multi', name: '双手开花', icon: '多', description: '额外发射子弹' },
+  { id: 'speed', name: '溜冰鞋', icon: '靴', description: '移动速度提升' },
+  { id: 'pierce', name: '穿透果冻', icon: '穿', description: '子弹可穿透更多怪物' },
+  { id: 'lightning', name: '跳跳落雷', icon: '雷', description: '定时劈向怪群，升级增加次数和伤害' },
+  { id: 'hammers', name: '旋风大锤', icon: '锤', description: '身边生成环绕大锤，越升越多越猛' },
+  { id: 'aura', name: '蒜香泡泡', icon: '火', description: '生成灼烧火圈，奇数级加范围，偶数级加伤害' },
+  { id: 'frost', name: '冰沙领域', icon: '冰', description: '降低附近怪物速度，升级扩大范围' },
+  { id: 'growth', name: '经验糖果', icon: '糖', description: '获得更多经验，更快触发技能选择' },
+  { id: 'lucky', name: '幸运骰子', icon: '运', description: '偶尔暴击，并让掉落经验更丰厚' },
+  { id: 'regen', name: '草莓药瓶', icon: '药', description: '持续缓慢回血，升级后回复更快' },
 ];
 
 export class Game {
@@ -410,6 +410,7 @@ export class Game {
       xpNeeded: this.xpNeeded,
       kills: this.kills,
       survived: this.survived,
+      waveNumber: this.waveNumber,
       enemies: this.enemies.length,
       skills: this.skillSummary(),
       boss: this.bossHudState(),
