@@ -46,16 +46,18 @@ type Enemy = {
   kind: EnemyKind;
   mesh: THREE.Group;
   healthFill: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  isBoss: boolean;
   hp: number;
   maxHp: number;
   speed: number;
   radius: number;
   xp: number;
   stunTimer: number;
+  attackTimer: number;
   knockback: THREE.Vector3;
 };
 
-type EnemyKind = 'normal' | 'runner' | 'brute';
+type EnemyKind = 'normal' | 'runner' | 'brute' | 'boss-gunner' | 'boss-caster' | 'boss-charger';
 
 type EnemyConfig = {
   kind: EnemyKind;
@@ -65,6 +67,7 @@ type EnemyConfig = {
   radius: number;
   xp: number;
   scale: THREE.Vector3Tuple;
+  boss?: boolean;
 };
 
 type Projectile = {
@@ -72,6 +75,14 @@ type Projectile = {
   velocity: THREE.Vector3;
   damage: number;
   pierce: number;
+  age: number;
+  radius: number;
+};
+
+type EnemyProjectile = {
+  mesh: THREE.Mesh;
+  velocity: THREE.Vector3;
+  damage: number;
   age: number;
   radius: number;
 };
@@ -130,6 +141,36 @@ const ENEMY_CONFIGS: Record<EnemyKind, EnemyConfig> = {
     radius: 0.74,
     xp: 5,
     scale: [1.42, 1.05, 1.32],
+  },
+  'boss-gunner': {
+    kind: 'boss-gunner',
+    color: '#7657ff',
+    hp: 260,
+    speed: 1.18,
+    radius: 1.05,
+    xp: 28,
+    scale: [1.75, 1.55, 1.75],
+    boss: true,
+  },
+  'boss-caster': {
+    kind: 'boss-caster',
+    color: '#18b6a6',
+    hp: 230,
+    speed: 0.95,
+    radius: 1,
+    xp: 30,
+    scale: [1.62, 1.7, 1.62],
+    boss: true,
+  },
+  'boss-charger': {
+    kind: 'boss-charger',
+    color: '#c0433f',
+    hp: 340,
+    speed: 1.85,
+    radius: 1.16,
+    xp: 34,
+    scale: [2, 1.35, 1.85],
+    boss: true,
   },
 };
 
@@ -205,6 +246,7 @@ export class Game {
   private readonly player = this.createPlayer();
   private readonly enemies: Enemy[] = [];
   private readonly projectiles: Projectile[] = [];
+  private readonly enemyProjectiles: EnemyProjectile[] = [];
   private readonly scheduledShots: ScheduledShot[] = [];
   private readonly xpOrbs: XpOrb[] = [];
   private readonly healthOrbs: HealthOrb[] = [];
@@ -226,6 +268,8 @@ export class Game {
   private kills = 0;
   private survived = 0;
   private spawnTimer = 0;
+  private bossTimer = 18;
+  private bossSpawnCount = 0;
   private fireTimer = 0;
   private lightningTimer = 1.2;
   private auraTimer = 0;
@@ -297,6 +341,7 @@ export class Game {
   private restart(): void {
     for (const enemy of this.enemies.splice(0)) this.scene.remove(enemy.mesh);
     for (const projectile of this.projectiles.splice(0)) this.scene.remove(projectile.mesh);
+    for (const projectile of this.enemyProjectiles.splice(0)) this.scene.remove(projectile.mesh);
     this.scheduledShots.length = 0;
     for (const orb of this.xpOrbs.splice(0)) this.scene.remove(orb.mesh);
     for (const orb of this.healthOrbs.splice(0)) this.scene.remove(orb.mesh);
@@ -310,6 +355,8 @@ export class Game {
     this.kills = 0;
     this.survived = 0;
     this.spawnTimer = 0;
+    this.bossTimer = 18;
+    this.bossSpawnCount = 0;
     this.fireTimer = 0;
     this.lightningTimer = 1.2;
     this.auraTimer = 0;
@@ -341,6 +388,7 @@ export class Game {
       this.updateAura(delta);
       this.updateHealing(delta);
       this.updateProjectiles(delta);
+      this.updateEnemyProjectiles(delta);
       this.updateXpOrbs(delta);
       this.updateHealthOrbs(delta);
     }
@@ -416,6 +464,11 @@ export class Game {
 
   private updateSpawning(delta: number): void {
     this.spawnTimer -= delta;
+    this.bossTimer -= delta;
+    if (this.bossTimer <= 0) {
+      this.spawnBoss();
+      this.bossTimer = Math.max(26, 38 - this.survived * 0.04);
+    }
     const interval = Math.max(0.22, 1.1 - this.survived * 0.01);
     if (this.spawnTimer > 0) return;
     this.spawnTimer = interval;
@@ -438,7 +491,8 @@ export class Game {
       const frostRange = 3.4 + frostLevel * 0.25;
       const frostFactor = frostLevel > 0 && distance < frostRange ? Math.max(0.46, 1 - frostLevel * 0.035) : 1;
       if (enemy.stunTimer <= 0) {
-        enemy.mesh.position.addScaledVector(direction, enemy.speed * frostFactor * delta);
+        this.updateEnemyMovement(enemy, direction, distance, frostFactor, delta);
+        this.updateBossAttack(enemy, direction, distance, delta);
       }
       enemy.mesh.rotation.y = Math.atan2(direction.x, direction.z);
       enemy.mesh.position.y = 0.08 + Math.sin(elapsed * (enemy.stunTimer > 0 ? 18 : 7) + i) * (enemy.stunTimer > 0 ? 0.025 : 0.05);
@@ -454,6 +508,52 @@ export class Game {
           this.mode = 'game-over';
           this.hud.showGameOver(this.kills, this.survived);
         }
+      }
+    }
+  }
+
+  private updateEnemyMovement(enemy: Enemy, directionToPlayer: THREE.Vector3, distance: number, frostFactor: number, delta: number): void {
+    if (enemy.kind === 'boss-gunner') {
+      const preferredRange = 6.2;
+      const moveDirection = distance < preferredRange ? directionToPlayer.clone().multiplyScalar(-1) : directionToPlayer;
+      enemy.mesh.position.addScaledVector(moveDirection, enemy.speed * frostFactor * delta);
+      return;
+    }
+    if (enemy.kind === 'boss-caster') {
+      const preferredRange = 7.5;
+      if (distance < preferredRange - 0.5) {
+        enemy.mesh.position.addScaledVector(directionToPlayer, -enemy.speed * frostFactor * delta);
+      } else if (distance > preferredRange + 1.2) {
+        enemy.mesh.position.addScaledVector(directionToPlayer, enemy.speed * frostFactor * delta);
+      } else {
+        const orbit = new THREE.Vector3(directionToPlayer.z, 0, -directionToPlayer.x);
+        enemy.mesh.position.addScaledVector(orbit, enemy.speed * 0.55 * frostFactor * delta);
+      }
+      return;
+    }
+    const chargeBoost = enemy.kind === 'boss-charger' && enemy.attackTimer > 0.75 ? 1.85 : 1;
+    enemy.mesh.position.addScaledVector(directionToPlayer, enemy.speed * chargeBoost * frostFactor * delta);
+  }
+
+  private updateBossAttack(enemy: Enemy, directionToPlayer: THREE.Vector3, distance: number, delta: number): void {
+    if (!enemy.isBoss) return;
+    enemy.attackTimer -= delta;
+    if (enemy.kind === 'boss-charger') {
+      if (enemy.attackTimer <= 0) enemy.attackTimer = distance < 9 ? 1.35 : 0.45;
+      return;
+    }
+    if (enemy.attackTimer > 0) return;
+
+    const angle = Math.atan2(directionToPlayer.x, directionToPlayer.z);
+    if (enemy.kind === 'boss-gunner') {
+      enemy.attackTimer = 1.15;
+      this.spawnEnemyProjectile(enemy.mesh.position, angle, 10.5, 10, '#b8a7ff', 0.2);
+      return;
+    }
+    if (enemy.kind === 'boss-caster') {
+      enemy.attackTimer = 1.8;
+      for (let i = -1; i <= 1; i += 1) {
+        this.spawnEnemyProjectile(enemy.mesh.position, angle + i * 0.28, 7.2, 13, '#40f0d0', 0.28);
       }
     }
   }
@@ -531,6 +631,35 @@ export class Game {
       }
     }
   }
+
+  private updateEnemyProjectiles(delta: number): void {
+    for (let i = this.enemyProjectiles.length - 1; i >= 0; i -= 1) {
+      const projectile = this.enemyProjectiles[i];
+      projectile.age += delta;
+      projectile.mesh.position.addScaledVector(projectile.velocity, delta);
+      projectile.mesh.rotation.y += delta * 8;
+      const dx = projectile.mesh.position.x - this.player.position.x;
+      const dz = projectile.mesh.position.z - this.player.position.z;
+      const hitRadius = projectile.radius + PLAYER_RADIUS;
+      const hitPlayer = dx * dx + dz * dz < hitRadius * hitRadius;
+      if (hitPlayer && this.hitCooldown <= 0) {
+        this.health -= projectile.damage;
+        this.hitCooldown = 0.5;
+        this.audio.hit();
+        this.hud.flashDamage();
+      }
+      if (hitPlayer || projectile.age > 4) {
+        this.scene.remove(projectile.mesh);
+        this.enemyProjectiles.splice(i, 1);
+      }
+      if (this.health <= 0) {
+        this.health = 0;
+        this.mode = 'game-over';
+        this.hud.showGameOver(this.kills, this.survived);
+      }
+    }
+  }
+
 
   private updateXpOrbs(delta: number): void {
     for (let i = this.xpOrbs.length - 1; i >= 0; i -= 1) {
@@ -702,12 +831,45 @@ export class Game {
       kind: config.kind,
       mesh,
       healthFill: visual.healthFill,
+      isBoss: config.boss ?? false,
       hp: config.hp * difficulty,
       maxHp: config.hp * difficulty,
       speed: config.speed + Math.random() * 0.18 + this.survived * 0.004,
       radius: config.radius,
       xp: config.xp + Math.floor(this.survived / 35),
       stunTimer: 0,
+      attackTimer: 0,
+      knockback: new THREE.Vector3(),
+    });
+    this.scene.add(mesh);
+  }
+
+  private spawnBoss(): void {
+    const bossKinds: EnemyKind[] = ['boss-gunner', 'boss-caster', 'boss-charger'];
+    const config = ENEMY_CONFIGS[bossKinds[this.bossSpawnCount % bossKinds.length]];
+    this.bossSpawnCount += 1;
+    const angle = Math.random() * Math.PI * 2;
+    const radius = 18 + Math.random() * 3;
+    const visual = this.createEnemyMesh(config);
+    const mesh = visual.group;
+    mesh.position.set(
+      this.player.position.x + Math.sin(angle) * radius,
+      0,
+      this.player.position.z + Math.cos(angle) * radius,
+    );
+    const difficulty = 1 + this.survived / 95;
+    this.enemies.push({
+      kind: config.kind,
+      mesh,
+      healthFill: visual.healthFill,
+      isBoss: true,
+      hp: config.hp * difficulty,
+      maxHp: config.hp * difficulty,
+      speed: config.speed + this.survived * 0.0025,
+      radius: config.radius,
+      xp: config.xp + Math.floor(this.survived / 18),
+      stunTimer: 0,
+      attackTimer: 0.8,
       knockback: new THREE.Vector3(),
     });
     this.scene.add(mesh);
@@ -741,6 +903,31 @@ export class Game {
       pierce: (this.skillLevel('pierce') > 0 ? Math.floor(this.skillLevel('pierce') / 2) : 0) + pierceBonus,
       age: 0,
       radius: 0.22,
+    });
+    this.scene.add(mesh);
+  }
+
+  private spawnEnemyProjectile(
+    position: THREE.Vector3,
+    angle: number,
+    speed: number,
+    damage: number,
+    color: string,
+    radius: number,
+  ): void {
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(radius, 14, 10),
+      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.7, roughness: 0.3 }),
+    );
+    mesh.castShadow = true;
+    mesh.position.copy(position).add(new THREE.Vector3(0, 0.9, 0));
+    const direction = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
+    this.enemyProjectiles.push({
+      mesh,
+      velocity: direction.multiplyScalar(speed),
+      damage,
+      age: 0,
+      radius,
     });
     this.scene.add(mesh);
   }
@@ -997,21 +1184,63 @@ export class Game {
     face.position.set(0, body.position.y + 0.1, -0.43 * config.scale[2]);
     group.add(face);
 
+    if (config.boss) {
+      const marker = new THREE.Mesh(
+        new THREE.ConeGeometry(0.28, 0.42, 5),
+        new THREE.MeshStandardMaterial({ color: '#ffd166', emissive: '#9c5b00', emissiveIntensity: 0.35, roughness: 0.4 }),
+      );
+      marker.position.set(0, body.position.y + 0.86, 0);
+      marker.rotation.y = Math.PI / 5;
+      group.add(marker);
+
+      if (config.kind === 'boss-gunner') {
+        const cannon = new THREE.Mesh(
+          new THREE.BoxGeometry(0.28, 0.24, 1.05),
+          new THREE.MeshStandardMaterial({ color: '#2d4059', emissive: '#4b3cff', emissiveIntensity: 0.22, roughness: 0.3 }),
+        );
+        cannon.position.set(0.58, body.position.y, -0.68);
+        cannon.castShadow = true;
+        group.add(cannon);
+      } else if (config.kind === 'boss-caster') {
+        for (let i = 0; i < 4; i += 1) {
+          const orb = new THREE.Mesh(
+            new THREE.SphereGeometry(0.13, 10, 8),
+            new THREE.MeshBasicMaterial({ color: i % 2 === 0 ? '#40f0d0' : '#fff27a' }),
+          );
+          const angle = (i / 4) * Math.PI * 2;
+          orb.position.set(Math.sin(angle) * 0.52, body.position.y + 0.58, Math.cos(angle) * 0.52);
+          group.add(orb);
+        }
+      } else if (config.kind === 'boss-charger') {
+        for (const side of [-1, 1]) {
+          const horn = new THREE.Mesh(
+            new THREE.ConeGeometry(0.12, 0.55, 8),
+            new THREE.MeshStandardMaterial({ color: '#f7efe2', roughness: 0.45 }),
+          );
+          horn.position.set(side * 0.5, body.position.y + 0.2, -0.55);
+          horn.rotation.x = Math.PI / 2;
+          horn.rotation.z = side * 0.38;
+          horn.castShadow = true;
+          group.add(horn);
+        }
+      }
+    }
+
     const bar = new THREE.Group();
     bar.name = 'health-bar';
-    bar.position.set(0, body.position.y + 0.7, 0);
+    bar.position.set(0, body.position.y + (config.boss ? 1.08 : 0.7), 0);
     const barBack = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.92, 0.1),
+      new THREE.PlaneGeometry(config.boss ? 1.5 : 0.92, config.boss ? 0.14 : 0.1),
       new THREE.MeshBasicMaterial({ color: '#263238', depthTest: false }),
     );
     const healthFill = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.84, 0.064),
+      new THREE.PlaneGeometry(config.boss ? 1.38 : 0.84, config.boss ? 0.088 : 0.064),
       new THREE.MeshBasicMaterial({ color: '#7dff6a', depthTest: false }),
     );
     healthFill.name = 'health-fill';
-    healthFill.position.set(-0.42, 0, 0.004);
+    healthFill.position.set(config.boss ? -0.69 : -0.42, 0, 0.004);
     healthFill.scale.x = 1;
-    healthFill.geometry.translate(0.42, 0, 0);
+    healthFill.geometry.translate(config.boss ? 0.69 : 0.42, 0, 0);
     bar.add(barBack, healthFill);
     group.add(bar);
 
@@ -1057,9 +1286,11 @@ export class Game {
       survived: this.survived,
       enemies: this.enemies.length,
       enemyKinds: this.enemyKindCounts(),
+      bosses: this.enemies.filter((enemy) => enemy.isBoss).length,
       enemyHealthRatios: this.enemies.map((enemy) => THREE.MathUtils.clamp(enemy.hp / enemy.maxHp, 0, 1)),
       lowestEnemyHealthRatioSeen: this.lowestEnemyHealthRatioSeen,
       projectiles: this.projectiles.length,
+      enemyProjectiles: this.enemyProjectiles.length,
       scheduledShots: this.scheduledShots.length,
       xpOrbs: this.xpOrbs.length,
       healthOrbs: this.healthOrbs.length,
@@ -1095,7 +1326,7 @@ export class Game {
         counts[enemy.kind] += 1;
         return counts;
       },
-      { normal: 0, runner: 0, brute: 0 },
+      { normal: 0, runner: 0, brute: 0, 'boss-gunner': 0, 'boss-caster': 0, 'boss-charger': 0 },
     );
   }
 }

@@ -12,9 +12,11 @@ interface ThreeGameDiagnostics {
   survived: number;
   enemies: number;
   enemyKinds: Record<string, number>;
+  bosses: number;
   enemyHealthRatios: number[];
   lowestEnemyHealthRatioSeen: number;
   projectiles: number;
+  enemyProjectiles: number;
   scheduledShots: number;
   xpOrbs: number;
   healthOrbs: number;
