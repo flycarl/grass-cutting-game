@@ -50,7 +50,7 @@ async function resumeAfterLevelUp(page: import('@playwright/test').Page): Promis
   const firstChoice = page.locator('#overlay-body button').first();
   await expect(firstChoice).toBeVisible();
   await firstChoice.click();
-  await page.waitForFunction(() => window.__THREE_GAME_DIAGNOSTICS__?.mode === 'playing');
+  await page.waitForFunction(() => window.__THREE_GAME_DIAGNOSTICS__?.mode === 'playing', undefined, { timeout: 3000 });
 }
 
 test('renders a nonblank interactive game canvas', async ({ page }, testInfo) => {
@@ -105,7 +105,6 @@ test('renders a nonblank interactive game canvas', async ({ page }, testInfo) =>
     .poll(async () => page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__?.player.position.z ?? 0))
     .toBeLessThan(before - 0.3);
   await resumeAfterLevelUp(page);
-  await page.waitForFunction(() => window.__THREE_GAME_DIAGNOSTICS__?.mode === 'playing');
 
   const staminaBeforeRoll = await page.evaluate(() => window.__THREE_GAME_DIAGNOSTICS__?.stamina ?? 100);
   await page.keyboard.press('Space');

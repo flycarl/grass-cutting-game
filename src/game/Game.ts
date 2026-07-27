@@ -88,6 +88,12 @@ type EnemyProjectile = {
   deflected: boolean;
 };
 
+type Hammer = {
+  mesh: THREE.Mesh;
+  cooldown: number;
+  hitCount: number;
+};
+
 type ScheduledShot = {
   timer: number;
   angle: number;
@@ -251,7 +257,7 @@ export class Game {
   private readonly scheduledShots: ScheduledShot[] = [];
   private readonly xpOrbs: XpOrb[] = [];
   private readonly healthOrbs: HealthOrb[] = [];
-  private readonly hammerMeshes: THREE.Mesh[] = [];
+  private readonly hammers: Hammer[] = [];
   private readonly reusableVector = new THREE.Vector3();
   private readonly aimNdc = new THREE.Vector2();
   private readonly aimPoint = new THREE.Vector3(0, 0, -1);
@@ -349,7 +355,7 @@ export class Game {
     this.scheduledShots.length = 0;
     for (const orb of this.xpOrbs.splice(0)) this.scene.remove(orb.mesh);
     for (const orb of this.healthOrbs.splice(0)) this.scene.remove(orb.mesh);
-    for (const hammer of this.hammerMeshes.splice(0)) this.scene.remove(hammer);
+    for (const hammer of this.hammers.splice(0)) this.scene.remove(hammer.mesh);
     this.player.position.set(0, 0, 0);
     this.health = 100;
     this.stamina = MAX_STAMINA;
@@ -745,38 +751,51 @@ export class Game {
   private updateHammers(delta: number, elapsed: number): void {
     const level = this.skillLevel('hammers');
     const hammerCount = level > 0 ? Math.min(8, 2 + Math.floor(level / 2)) : 0;
-    while (this.hammerMeshes.length < hammerCount) {
-      const hammer = this.createHammerMesh();
-      this.hammerMeshes.push(hammer);
-      this.scene.add(hammer);
+    while (this.hammers.length < hammerCount) {
+      const hammer = { mesh: this.createHammerMesh(), cooldown: 0, hitCount: 0 };
+      this.hammers.push(hammer);
+      this.scene.add(hammer.mesh);
     }
-    while (this.hammerMeshes.length > hammerCount) {
-      const hammer = this.hammerMeshes.pop();
-      if (hammer) this.scene.remove(hammer);
+    while (this.hammers.length > hammerCount) {
+      const hammer = this.hammers.pop();
+      if (hammer) this.scene.remove(hammer.mesh);
     }
     if (hammerCount === 0) return;
 
     const orbitRadius = 1.75 + level * 0.07;
     const orbitSpeed = 2.7 + level * 0.11;
-    for (let i = 0; i < this.hammerMeshes.length; i += 1) {
-      const angle = elapsed * orbitSpeed + (i / this.hammerMeshes.length) * Math.PI * 2;
-      const hammer = this.hammerMeshes[i];
-      hammer.position.set(
+    const hitsBeforeCooldown = Math.max(4, 7 - Math.floor(level / 3));
+    for (let i = 0; i < this.hammers.length; i += 1) {
+      const hammer = this.hammers[i];
+      hammer.cooldown = Math.max(0, hammer.cooldown - delta);
+      const active = hammer.cooldown <= 0;
+      hammer.mesh.visible = active;
+      const angle = elapsed * orbitSpeed + (i / this.hammers.length) * Math.PI * 2;
+      hammer.mesh.position.set(
         this.player.position.x + Math.sin(angle) * orbitRadius,
         0.75,
         this.player.position.z + Math.cos(angle) * orbitRadius,
       );
-      hammer.rotation.set(0.4, angle, elapsed * 7);
+      hammer.mesh.rotation.set(0.4, angle, elapsed * 7);
+      if (!active) continue;
       for (const projectile of this.enemyProjectiles) {
         if (projectile.deflected) continue;
-        if (hammer.position.distanceTo(projectile.mesh.position) < projectile.radius + 0.62) {
-          this.deflectEnemyProjectile(projectile, hammer.position);
+        if (hammer.mesh.position.distanceTo(projectile.mesh.position) < projectile.radius + 0.62) {
+          this.deflectEnemyProjectile(projectile, hammer.mesh.position);
+          this.cooldownHammer(hammer, 2.8);
+          break;
         }
       }
+      if (hammer.cooldown > 0) continue;
       for (const enemy of this.enemies) {
-        if (hammer.position.distanceTo(enemy.mesh.position) < enemy.radius + 0.55) {
+        if (hammer.mesh.position.distanceTo(enemy.mesh.position) < enemy.radius + 0.55) {
           this.damageEnemy(enemy, (18 + level * 3) * delta * 3.2);
           this.applyKnockback(enemy, enemy.mesh.position.clone().sub(this.player.position), 6.5 + level * 0.35);
+          hammer.hitCount += 1;
+          if (hammer.hitCount >= hitsBeforeCooldown) {
+            this.cooldownHammer(hammer, 1.7);
+            break;
+          }
         }
       }
     }
@@ -1014,6 +1033,12 @@ export class Game {
     material.color.set('#ffe066');
     material.emissive.set('#ff8a2b');
     projectile.mesh.scale.setScalar(1.16);
+  }
+
+  private cooldownHammer(hammer: Hammer, duration: number): void {
+    hammer.cooldown = duration;
+    hammer.hitCount = 0;
+    hammer.mesh.visible = false;
   }
 
   private applyKnockback(enemy: Enemy, direction: THREE.Vector3, force: number): void {
@@ -1384,6 +1409,8 @@ export class Game {
       projectiles: this.projectiles.length,
       enemyProjectiles: this.enemyProjectiles.length,
       deflectedEnemyProjectiles: this.enemyProjectiles.filter((projectile) => projectile.deflected).length,
+      hammers: this.hammers.length,
+      coolingHammers: this.hammers.filter((hammer) => hammer.cooldown > 0).length,
       scheduledShots: this.scheduledShots.length,
       xpOrbs: this.xpOrbs.length,
       healthOrbs: this.healthOrbs.length,
