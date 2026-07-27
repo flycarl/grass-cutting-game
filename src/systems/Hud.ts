@@ -9,6 +9,10 @@ type HudState = {
   survived: number;
   enemies: number;
   skills: string;
+  boss?: {
+    name: string;
+    healthRatio: number;
+  };
 };
 
 export type WeaponChoiceView = {
@@ -47,6 +51,10 @@ export class Hud {
   private readonly skillValue = this.getElement('#skill-value');
   private readonly weaponName = this.getElement('#weapon-name');
   private readonly statusLine = this.getElement('#status-line');
+  private readonly bossBar = this.getElement('#boss-bar');
+  private readonly bossTitle = this.getElement('#boss-title');
+  private readonly bossFill = this.getElement('#boss-fill');
+  private readonly bossPercent = this.getElement('#boss-percent');
   private readonly overlay = this.getElement('#overlay');
   private readonly overlayTitle = this.getElement('#overlay-title');
   private readonly overlayBody = this.getElement('#overlay-body');
@@ -67,6 +75,15 @@ export class Hud {
     this.enemyValue.textContent = String(state.enemies).padStart(2, '0');
     this.skillValue.textContent = state.skills;
     this.timerValue.textContent = this.formatTime(state.survived);
+    if (state.boss) {
+      const percent = Math.max(0, Math.min(100, Math.round(state.boss.healthRatio * 100)));
+      this.bossBar.hidden = false;
+      this.bossTitle.textContent = state.boss.name;
+      this.bossFill.style.width = `${percent}%`;
+      this.bossPercent.textContent = `${percent}%`;
+    } else {
+      this.bossBar.hidden = true;
+    }
     if (state.mode === 'playing') this.statusLine.textContent = '四面八方有怪物靠近';
     if (state.mode === 'level-up') this.statusLine.textContent = '选择技能强化';
   }

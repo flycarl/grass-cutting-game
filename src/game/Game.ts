@@ -405,6 +405,7 @@ export class Game {
       survived: this.survived,
       enemies: this.enemies.length,
       skills: this.skillSummary(),
+      boss: this.bossHudState(),
     });
     this.publishDiagnostics();
   }
@@ -987,6 +988,29 @@ export class Game {
     const crit = luckyLevel > 0 && Math.random() < 0.04 + luckyLevel * 0.012;
     const damage = this.selectedWeapon.damage * (1 + this.skillLevel('damage') * 0.13);
     return crit ? damage * 2.2 : damage;
+  }
+
+  private bossHudState(): { name: string; healthRatio: number } | undefined {
+    const bosses = this.enemies.filter((enemy) => enemy.isBoss);
+    if (bosses.length === 0) return undefined;
+    const boss = bosses.reduce((selected, enemy) => (enemy.maxHp > selected.maxHp ? enemy : selected), bosses[0]);
+    return {
+      name: this.enemyDisplayName(boss.kind),
+      healthRatio: THREE.MathUtils.clamp(boss.hp / boss.maxHp, 0, 1),
+    };
+  }
+
+  private enemyDisplayName(kind: EnemyKind): string {
+    switch (kind) {
+      case 'boss-gunner':
+        return '枪手 BOSS';
+      case 'boss-caster':
+        return '法球 BOSS';
+      case 'boss-charger':
+        return '冲锋 BOSS';
+      default:
+        return 'BOSS';
+    }
   }
 
   private findNearestEnemy(): Enemy | null {
