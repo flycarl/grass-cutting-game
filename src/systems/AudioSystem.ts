@@ -1,4 +1,4 @@
-type GunSoundId = 'sprout-rifle' | 'bubble-shotgun' | 'star-smg' | 'sniper-rifle';
+type GunSoundId = 'sprout-rifle' | 'bubble-shotgun' | 'star-smg' | 'sniper-rifle' | 'rocket-launcher';
 
 type GunSound = {
   noiseDuration: number;
@@ -86,6 +86,23 @@ const GUN_SOUNDS: Record<GunSoundId, GunSound> = {
     tailFrequency: 132,
     tailDuration: 0.34,
     tailVolume: 0.055,
+  },
+  'rocket-launcher': {
+    noiseDuration: 0.28,
+    noiseVolume: 0.17,
+    noiseFilter: 720,
+    thumpStart: 72,
+    thumpEnd: 28,
+    thumpDuration: 0.3,
+    thumpVolume: 0.17,
+    crackStart: 360,
+    crackEnd: 82,
+    crackDuration: 0.18,
+    crackVolume: 0.085,
+    tailDelay: 0.07,
+    tailFrequency: 96,
+    tailDuration: 0.38,
+    tailVolume: 0.06,
   },
 };
 

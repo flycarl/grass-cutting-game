@@ -6,7 +6,7 @@ import { AudioSystem } from '../systems/AudioSystem';
 import { CameraRig } from '../systems/CameraRig';
 import { Hud, type SkillChoiceView, type WeaponChoiceView } from '../systems/Hud';
 
-type WeaponId = 'sprout-rifle' | 'bubble-shotgun' | 'star-smg' | 'sniper-rifle';
+type WeaponId = 'sprout-rifle' | 'bubble-shotgun' | 'star-smg' | 'sniper-rifle' | 'rocket-launcher';
 type SkillId =
   | 'rapid'
   | 'damage'
@@ -78,6 +78,7 @@ type Projectile = {
   pierce: number;
   age: number;
   radius: number;
+  explosionRadius: number;
   hitEnemies: Set<Enemy>;
 };
 
@@ -231,6 +232,18 @@ const WEAPONS: Weapon[] = [
     spread: 0,
     pellets: 1,
     color: '#7ee081',
+  },
+  {
+    id: 'rocket-launcher',
+    name: '番茄火箭筒',
+    icon: '炮',
+    description: '慢速火箭，命中后范围爆炸',
+    fireRate: 0.55,
+    projectileSpeed: 42,
+    damage: 24,
+    spread: 0,
+    pellets: 1,
+    color: '#ff5a36',
   },
 ];
 
@@ -645,6 +658,7 @@ export class Game {
       projectile.mesh.rotation.y += delta * 12;
 
       let remove = projectile.age > 2.1;
+      let explode = remove && projectile.explosionRadius > 0;
       for (let j = this.enemies.length - 1; j >= 0; j -= 1) {
         const enemy = this.enemies[j];
         if (projectile.hitEnemies.has(enemy)) continue;
@@ -652,6 +666,11 @@ export class Game {
         const dx = projectile.mesh.position.x - enemy.mesh.position.x;
         const dz = projectile.mesh.position.z - enemy.mesh.position.z;
         if (dx * dx + dz * dz > hitRadius * hitRadius) continue;
+        if (projectile.explosionRadius > 0) {
+          explode = true;
+          remove = true;
+          break;
+        }
         projectile.hitEnemies.add(enemy);
         this.damageEnemy(enemy, projectile.damage, projectile.trueDamage);
         projectile.pierce -= 1;
@@ -662,6 +681,9 @@ export class Game {
       }
 
       if (remove) {
+        if (explode) {
+          this.explodeProjectile(projectile.mesh.position, projectile.damage, projectile.trueDamage, projectile.explosionRadius);
+        }
         this.scene.remove(projectile.mesh);
         this.projectiles.splice(i, 1);
       }
@@ -950,16 +972,22 @@ export class Game {
   }
 
   private spawnProjectile(angle: number, damageMultiplier = 1, pierceBonus = 0, color = this.selectedWeapon.color): void {
-    const geometry = new THREE.SphereGeometry(0.16, 12, 8);
+    const isRocket = this.selectedWeapon.id === 'rocket-launcher';
+    const geometry = isRocket ? new THREE.CapsuleGeometry(0.13, 0.42, 4, 10) : new THREE.SphereGeometry(0.16, 12, 8);
     const material = new THREE.MeshStandardMaterial({
       color,
       emissive: color,
-      emissiveIntensity: 0.55,
+      emissiveIntensity: isRocket ? 0.8 : 0.55,
       roughness: 0.35,
     });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = true;
     mesh.position.copy(this.player.position).add(new THREE.Vector3(0, 0.85, 0));
+    if (isRocket) {
+      mesh.scale.set(1.2, 1.2, 1.2);
+      mesh.rotation.x = Math.PI / 2;
+      mesh.rotation.y = angle;
+    }
     const direction = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
     this.projectiles.push({
       mesh,
@@ -968,10 +996,46 @@ export class Game {
       trueDamage: this.weaponTrueDamage(),
       pierce: this.skillLevel('pierce') + pierceBonus,
       age: 0,
-      radius: 0.22,
+      radius: isRocket ? 0.32 : 0.22,
+      explosionRadius: isRocket ? 2.45 + this.skillLevel('multi') * 0.06 : 0,
       hitEnemies: new Set(),
     });
     this.scene.add(mesh);
+  }
+
+  private explodeProjectile(position: THREE.Vector3, damage: number, trueDamage: number, radius: number): void {
+    const blastCenter = position.clone();
+    for (const enemy of [...this.enemies]) {
+      const dx = enemy.mesh.position.x - blastCenter.x;
+      const dz = enemy.mesh.position.z - blastCenter.z;
+      const distanceSquared = dx * dx + dz * dz;
+      if (distanceSquared > (radius + enemy.radius) * (radius + enemy.radius)) continue;
+      const distance = Math.sqrt(distanceSquared);
+      const falloff = THREE.MathUtils.clamp(1.12 - distance / (radius * 1.45), 0.68, 1);
+      this.damageEnemy(enemy, damage * falloff, trueDamage);
+    }
+
+    const shockwave = new THREE.Mesh(
+      new THREE.RingGeometry(0.38, radius, 48),
+      new THREE.MeshBasicMaterial({
+        color: '#ffb020',
+        transparent: true,
+        opacity: 0.58,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    );
+    shockwave.rotation.x = -Math.PI / 2;
+    shockwave.position.copy(blastCenter);
+    shockwave.position.y = 0.08;
+    shockwave.renderOrder = 4;
+    this.scene.add(shockwave);
+    shockwave.scale.setScalar(1);
+    setTimeout(() => {
+      this.scene.remove(shockwave);
+      shockwave.geometry.dispose();
+      shockwave.material.dispose();
+    }, 160);
   }
 
   private spawnEnemyProjectile(
