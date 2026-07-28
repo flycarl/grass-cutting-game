@@ -469,7 +469,7 @@ export class Game {
       if (move.lengthSq() > 0.01) {
         this.rollDirection.set(move.x, 0, move.y).normalize();
       } else {
-        this.rollDirection.set(Math.sin(this.player.rotation.y), 0, -Math.cos(this.player.rotation.y)).normalize();
+        this.rollDirection.set(Math.sin(this.player.rotation.y), 0, Math.cos(this.player.rotation.y)).normalize();
       }
     }
 
@@ -488,7 +488,7 @@ export class Game {
     if (this.input.readAimNdc(this.aimNdc)) {
       this.player.rotation.y = this.aimAngle;
     } else if (move.lengthSq() > 0.01) {
-      this.player.rotation.y = Math.atan2(move.x, -move.y);
+      this.player.rotation.y = Math.atan2(move.x, move.y);
     }
     this.player.position.y = Math.sin(elapsed * 8) * 0.04;
   }
@@ -616,6 +616,7 @@ export class Game {
 
     const baseAngle = Math.atan2(target.mesh.position.x - this.player.position.x, target.mesh.position.z - this.player.position.z);
     this.aimAngle = baseAngle;
+    this.player.rotation.y = baseAngle;
     const extraPellets = Math.floor(this.skillLevel('multi') / 3);
     if (this.selectedWeapon.id === 'sprout-rifle') {
       const burstCount = 5 + extraPellets;
@@ -982,13 +983,18 @@ export class Game {
     });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = true;
-    mesh.position.copy(this.player.position).add(new THREE.Vector3(0, 0.85, 0));
+    const direction = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
+    const right = new THREE.Vector3(Math.cos(angle), 0, -Math.sin(angle));
+    mesh.position
+      .copy(this.player.position)
+      .addScaledVector(direction, isRocket ? 0.86 : 0.78)
+      .addScaledVector(right, 0.32)
+      .add(new THREE.Vector3(0, 0.78, 0));
     if (isRocket) {
       mesh.scale.set(1.2, 1.2, 1.2);
       mesh.rotation.x = Math.PI / 2;
       mesh.rotation.y = angle;
     }
-    const direction = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
     this.projectiles.push({
       mesh,
       velocity: direction.multiplyScalar(this.selectedWeapon.projectileSpeed),
@@ -1358,14 +1364,14 @@ export class Game {
       new THREE.BoxGeometry(0.58, 0.2, 0.12),
       new THREE.MeshStandardMaterial({ color: '#245b7a', emissive: '#143144', emissiveIntensity: 0.3 }),
     );
-    visor.position.set(0, 0.93, -0.36);
+    visor.position.set(0, 0.93, 0.36);
     group.add(visor);
 
     const gun = new THREE.Mesh(
       new THREE.BoxGeometry(0.18, 0.18, 0.72),
       new THREE.MeshStandardMaterial({ color: '#2d4059', roughness: 0.35 }),
     );
-    gun.position.set(0.42, 0.72, -0.45);
+    gun.position.set(0.42, 0.72, 0.45);
     gun.castShadow = true;
     group.add(gun);
 
