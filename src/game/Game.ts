@@ -6,7 +6,7 @@ import { AudioSystem } from '../systems/AudioSystem';
 import { CameraRig } from '../systems/CameraRig';
 import { Hud, type SkillChoiceView, type WeaponChoiceView } from '../systems/Hud';
 
-type WeaponId = 'sprout-rifle' | 'bubble-shotgun' | 'star-smg';
+type WeaponId = 'sprout-rifle' | 'bubble-shotgun' | 'star-smg' | 'sniper-rifle';
 type SkillId =
   | 'rapid'
   | 'damage'
@@ -152,7 +152,7 @@ const ENEMY_CONFIGS: Record<EnemyKind, EnemyConfig> = {
   'boss-gunner': {
     kind: 'boss-gunner',
     color: '#7657ff',
-    hp: 260,
+    hp: 540,
     speed: 1.18,
     radius: 1.05,
     xp: 28,
@@ -162,7 +162,7 @@ const ENEMY_CONFIGS: Record<EnemyKind, EnemyConfig> = {
   'boss-caster': {
     kind: 'boss-caster',
     color: '#18b6a6',
-    hp: 230,
+    hp: 480,
     speed: 0.95,
     radius: 1,
     xp: 30,
@@ -172,7 +172,7 @@ const ENEMY_CONFIGS: Record<EnemyKind, EnemyConfig> = {
   'boss-charger': {
     kind: 'boss-charger',
     color: '#c0433f',
-    hp: 340,
+    hp: 680,
     speed: 1.85,
     radius: 1.16,
     xp: 34,
@@ -217,6 +217,18 @@ const WEAPONS: Weapon[] = [
     spread: 0.08,
     pellets: 1,
     color: '#ff7fa3',
+  },
+  {
+    id: 'sniper-rifle',
+    name: '重炮狙击枪',
+    icon: '狙',
+    description: '射速很慢，单发重击',
+    fireRate: 0.55,
+    projectileSpeed: 86,
+    damage: 24,
+    spread: 0,
+    pellets: 1,
+    color: '#7ee081',
   },
 ];
 
