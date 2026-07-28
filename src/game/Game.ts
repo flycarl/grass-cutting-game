@@ -619,7 +619,7 @@ export class Game {
         this.spawnProjectile(angle);
       }
     }
-    this.audio.shoot();
+    this.audio.shoot(this.selectedWeapon.id);
   }
 
   private updateScheduledShots(delta: number): void {
