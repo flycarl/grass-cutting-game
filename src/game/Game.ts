@@ -409,7 +409,9 @@ export class Game {
   private laserTimer = 0;
   private laserDuration = 0;
   private laserBaseAngle = 0;
+  private laserSecondBaseAngle = 0;
   private laserSweepAngle = 0;
+  private laserSecondSweepLocked = false;
   private lightningTimer = 1.2;
   private auraTimer = 0;
   private hitCooldown = 0;
@@ -503,7 +505,9 @@ export class Game {
     this.laserTimer = 0;
     this.laserDuration = 0;
     this.laserBaseAngle = 0;
+    this.laserSecondBaseAngle = 0;
     this.laserSweepAngle = 0;
+    this.laserSecondSweepLocked = false;
     this.laserBeam.visible = false;
     this.lightningTimer = 1.2;
     this.auraTimer = 0;
@@ -728,7 +732,7 @@ export class Game {
     this.player.rotation.y = baseAngle;
     if (this.selectedWeapon.id === 'laser-rifle') {
       this.startLaserSweep(baseAngle);
-      this.fireTimer = this.laserCooldown(fireRate);
+      this.fireTimer = 0;
       this.audio.shoot(this.selectedWeapon.id);
       return;
     }
@@ -769,10 +773,12 @@ export class Game {
   }
 
   private startLaserSweep(baseAngle: number): void {
-    this.laserDuration = this.laserSweepDuration();
+    this.laserDuration = this.laserSweepDuration() * 2;
     this.laserTimer = this.laserDuration;
     this.laserSweepAngle = this.laserSweepArc();
     this.laserBaseAngle = baseAngle;
+    this.laserSecondBaseAngle = baseAngle;
+    this.laserSecondSweepLocked = false;
     this.laserBeam.visible = true;
   }
 
@@ -784,8 +790,23 @@ export class Game {
 
     this.laserTimer = Math.max(0, this.laserTimer - delta);
     const progress = 1 - this.laserTimer / Math.max(0.001, this.laserDuration);
-    const sweep = THREE.MathUtils.smoothstep(progress, 0, 1);
-    const angle = this.laserBaseAngle - this.laserSweepAngle / 2 + sweep * this.laserSweepAngle;
+    if (progress >= 0.5 && !this.laserSecondSweepLocked) {
+      const nextTarget = this.findNearestEnemy();
+      if (nextTarget) {
+        this.laserSecondBaseAngle = Math.atan2(
+          nextTarget.mesh.position.x - this.player.position.x,
+          nextTarget.mesh.position.z - this.player.position.z,
+        );
+      }
+      this.laserSecondSweepLocked = true;
+    }
+    const firstPass = progress < 0.5;
+    const passProgress = firstPass ? progress / 0.5 : (progress - 0.5) / 0.5;
+    const sweep = THREE.MathUtils.smoothstep(passProgress, 0, 1);
+    const baseAngle = firstPass ? this.laserBaseAngle : this.laserSecondBaseAngle;
+    const angle = firstPass
+      ? baseAngle - this.laserSweepAngle / 2 + sweep * this.laserSweepAngle
+      : baseAngle + this.laserSweepAngle / 2 - sweep * this.laserSweepAngle;
     this.aimAngle = angle;
     this.player.rotation.y = angle;
 
@@ -811,6 +832,12 @@ export class Game {
       const dz = enemy.mesh.position.z - closest.z;
       if (dx * dx + dz * dz > (width + enemy.radius) * (width + enemy.radius)) continue;
       this.damageEnemy(enemy, damage, trueDamage);
+    }
+
+    if (this.laserTimer <= 0) {
+      this.laserBeam.visible = false;
+      const fireRate = this.selectedWeapon.fireRate * this.rapidFireMultiplier() * this.weaponFireRateMultiplier();
+      this.fireTimer = this.laserCooldown(fireRate);
     }
   }
 
@@ -1435,7 +1462,10 @@ export class Game {
 
   private skillChoices(): SkillChoiceView[] {
     const available = ALL_SKILLS.filter(
-      (skill) => (!skill.weapon || skill.weapon === this.selectedWeapon.id) && this.skillLevel(skill.id) < MAX_SKILL_LEVEL,
+      (skill) =>
+        (!skill.weapon || skill.weapon === this.selectedWeapon.id) &&
+        this.skillAppliesToWeapon(skill.id) &&
+        this.skillLevel(skill.id) < MAX_SKILL_LEVEL,
     );
     return available
       .sort(() => Math.random() - 0.5)
@@ -1467,6 +1497,16 @@ export class Game {
 
   private skillLevel(id: SkillId): number {
     return this.skillLevels.get(id) ?? 0;
+  }
+
+  private skillAppliesToWeapon(id: SkillId): boolean {
+    if (id === 'pierce') {
+      return !['sprout-rifle', 'rocket-launcher', 'laser-rifle'].includes(this.selectedWeapon.id);
+    }
+    if (id === 'multi') {
+      return this.selectedWeapon.id !== 'laser-rifle';
+    }
+    return true;
   }
 
   private createScene(): void {
