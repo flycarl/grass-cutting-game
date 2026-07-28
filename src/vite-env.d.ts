@@ -23,6 +23,8 @@ interface ThreeGameDiagnostics {
   hammers: number;
   coolingHammers: number;
   hammerDurability: number;
+  laserActive: boolean;
+  laserTimer: number;
   scheduledShots: number;
   xpOrbs: number;
   healthOrbs: number;

@@ -6,7 +6,7 @@ import { AudioSystem } from '../systems/AudioSystem';
 import { CameraRig } from '../systems/CameraRig';
 import { Hud, type SkillChoiceView, type WeaponChoiceView } from '../systems/Hud';
 
-type WeaponId = 'sprout-rifle' | 'bubble-shotgun' | 'star-smg' | 'sniper-rifle' | 'rocket-launcher';
+type WeaponId = 'sprout-rifle' | 'bubble-shotgun' | 'star-smg' | 'sniper-rifle' | 'rocket-launcher' | 'laser-rifle';
 type SkillId =
   | 'rapid'
   | 'damage'
@@ -25,7 +25,11 @@ type SkillId =
   | 'smg-overdrive'
   | 'sniper-focus'
   | 'rocket-blast'
-  | 'rocket-payload';
+  | 'rocket-payload'
+  | 'laser-arc'
+  | 'laser-duration'
+  | 'laser-power'
+  | 'laser-coolant';
 type GameMode = 'weapon-select' | 'playing' | 'level-up' | 'paused' | 'game-over';
 
 type Weapon = {
@@ -252,6 +256,18 @@ const WEAPONS: Weapon[] = [
     pellets: 1,
     color: '#ff5a36',
   },
+  {
+    id: 'laser-rifle',
+    name: '彩虹激光枪',
+    icon: '光',
+    description: '蓄能后从左到右扫射',
+    fireRate: 0.28,
+    projectileSpeed: 0,
+    damage: 18,
+    spread: 0,
+    pellets: 1,
+    color: '#8f7dff',
+  },
 ];
 
 const SKILLS: Skill[] = [
@@ -312,6 +328,34 @@ const WEAPON_SKILLS: Skill[] = [
     description: '番茄火箭筒每级提高爆炸伤害',
     weapon: 'rocket-launcher',
   },
+  {
+    id: 'laser-arc',
+    name: '广角棱镜',
+    icon: '扇',
+    description: '激光枪每级大幅扩大扫射角度',
+    weapon: 'laser-rifle',
+  },
+  {
+    id: 'laser-duration',
+    name: '延时光束',
+    icon: '时',
+    description: '激光枪每级延长扫射时间',
+    weapon: 'laser-rifle',
+  },
+  {
+    id: 'laser-power',
+    name: '高能灼光',
+    icon: '光',
+    description: '激光枪每级明显提高持续伤害',
+    weapon: 'laser-rifle',
+  },
+  {
+    id: 'laser-coolant',
+    name: '冷却晶片',
+    icon: '冷',
+    description: '激光枪每级缩短蓄能冷却',
+    weapon: 'laser-rifle',
+  },
 ];
 
 const ALL_SKILLS = [...SKILLS, ...WEAPON_SKILLS];
@@ -332,6 +376,7 @@ export class Game {
   private readonly loop = new Loop((delta, elapsed) => this.update(delta, elapsed), () => this.render());
 
   private readonly player = this.createPlayer();
+  private readonly laserBeam = this.createLaserBeam();
   private readonly enemies: Enemy[] = [];
   private readonly projectiles: Projectile[] = [];
   private readonly enemyProjectiles: EnemyProjectile[] = [];
@@ -361,6 +406,10 @@ export class Game {
   private waveNumber = 0;
   private waveWasAboveThreshold = false;
   private fireTimer = 0;
+  private laserTimer = 0;
+  private laserDuration = 0;
+  private laserBaseAngle = 0;
+  private laserSweepAngle = 0;
   private lightningTimer = 1.2;
   private auraTimer = 0;
   private hitCooldown = 0;
@@ -451,6 +500,11 @@ export class Game {
     this.waveNumber = 0;
     this.waveWasAboveThreshold = false;
     this.fireTimer = 0;
+    this.laserTimer = 0;
+    this.laserDuration = 0;
+    this.laserBaseAngle = 0;
+    this.laserSweepAngle = 0;
+    this.laserBeam.visible = false;
     this.lightningTimer = 1.2;
     this.auraTimer = 0;
     this.hitCooldown = 0;
@@ -477,6 +531,7 @@ export class Game {
       this.updateEnemies(delta, elapsed);
       this.updateScheduledShots(delta);
       this.updateShooting(delta);
+      this.updateLaser(delta, elapsed);
       this.updateLightning(delta);
       this.updateHammers(delta, elapsed);
       this.updateAura(delta);
@@ -661,9 +716,9 @@ export class Game {
 
   private updateShooting(delta: number): void {
     this.fireTimer -= delta;
+    if (this.selectedWeapon.id === 'laser-rifle' && this.laserTimer > 0) return;
     const fireRate = this.selectedWeapon.fireRate * this.rapidFireMultiplier() * this.weaponFireRateMultiplier();
     if (this.fireTimer > 0 || this.enemies.length === 0) return;
-    this.fireTimer = 1 / fireRate;
 
     const target = this.findNearestEnemy();
     if (!target) return;
@@ -671,6 +726,14 @@ export class Game {
     const baseAngle = Math.atan2(target.mesh.position.x - this.player.position.x, target.mesh.position.z - this.player.position.z);
     this.aimAngle = baseAngle;
     this.player.rotation.y = baseAngle;
+    if (this.selectedWeapon.id === 'laser-rifle') {
+      this.startLaserSweep(baseAngle);
+      this.fireTimer = this.laserCooldown(fireRate);
+      this.audio.shoot(this.selectedWeapon.id);
+      return;
+    }
+
+    this.fireTimer = 1 / fireRate;
     const extraPellets = Math.floor(this.skillLevel('multi') / 3);
     if (this.selectedWeapon.id === 'sprout-rifle') {
       const burstCount = 5 + extraPellets + this.skillLevel('sprout-burst');
@@ -702,6 +765,52 @@ export class Game {
       if (shot.timer > 0) continue;
       this.spawnProjectile(shot.angle, shot.damageMultiplier, shot.pierceBonus, shot.color);
       this.scheduledShots.splice(i, 1);
+    }
+  }
+
+  private startLaserSweep(baseAngle: number): void {
+    this.laserDuration = this.laserSweepDuration();
+    this.laserTimer = this.laserDuration;
+    this.laserSweepAngle = this.laserSweepArc();
+    this.laserBaseAngle = baseAngle;
+    this.laserBeam.visible = true;
+  }
+
+  private updateLaser(delta: number, elapsed: number): void {
+    if (this.laserTimer <= 0) {
+      this.laserBeam.visible = false;
+      return;
+    }
+
+    this.laserTimer = Math.max(0, this.laserTimer - delta);
+    const progress = 1 - this.laserTimer / Math.max(0.001, this.laserDuration);
+    const sweep = THREE.MathUtils.smoothstep(progress, 0, 1);
+    const angle = this.laserBaseAngle - this.laserSweepAngle / 2 + sweep * this.laserSweepAngle;
+    this.aimAngle = angle;
+    this.player.rotation.y = angle;
+
+    const range = this.laserRange();
+    const width = this.laserWidth();
+    const direction = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
+    const right = new THREE.Vector3(Math.cos(angle), 0, -Math.sin(angle));
+    const start = this.player.position.clone().addScaledVector(direction, 0.74).addScaledVector(right, 0.32);
+    const beamCenter = start.clone().addScaledVector(direction, range / 2);
+    this.laserBeam.position.set(beamCenter.x, 0.78, beamCenter.z);
+    this.laserBeam.rotation.y = angle;
+    this.laserBeam.scale.set(width, 0.16 + Math.sin(elapsed * 28) * 0.025, range);
+    const material = this.laserBeam.material as THREE.MeshBasicMaterial;
+    material.opacity = 0.5 + Math.sin(elapsed * 40) * 0.12;
+
+    const damage = this.laserDamagePerSecond() * delta;
+    const trueDamage = this.weaponTrueDamage() * delta * 0.8;
+    for (const enemy of [...this.enemies]) {
+      const toEnemy = enemy.mesh.position.clone().sub(start);
+      const forward = THREE.MathUtils.clamp(toEnemy.dot(direction), 0, range);
+      const closest = start.clone().addScaledVector(direction, forward);
+      const dx = enemy.mesh.position.x - closest.x;
+      const dz = enemy.mesh.position.z - closest.z;
+      if (dx * dx + dz * dz > (width + enemy.radius) * (width + enemy.radius)) continue;
+      this.damageEnemy(enemy, damage, trueDamage);
     }
   }
 
@@ -1261,6 +1370,31 @@ export class Game {
     return 2.45 + this.skillLevel('rocket-blast') * 0.28 + this.skillLevel('multi') * 0.06;
   }
 
+  private laserSweepDuration(): number {
+    return 1.15 + this.skillLevel('laser-duration') * 0.24;
+  }
+
+  private laserSweepArc(): number {
+    return 1.05 + this.skillLevel('laser-arc') * 0.24;
+  }
+
+  private laserDamagePerSecond(): number {
+    return this.selectedWeapon.damage + this.skillLevel('laser-power') * 7;
+  }
+
+  private laserCooldown(fireRate: number): number {
+    const baseCooldown = 1 / fireRate;
+    return Math.max(1.15, baseCooldown - this.skillLevel('laser-coolant') * 0.24);
+  }
+
+  private laserRange(): number {
+    return 11.5 + this.skillLevel('laser-arc') * 0.35;
+  }
+
+  private laserWidth(): number {
+    return 0.34 + this.skillLevel('laser-power') * 0.025;
+  }
+
   private bossHudState(): { name: string; healthRatio: number } | undefined {
     const bosses = this.enemies.filter((enemy) => enemy.isBoss);
     if (bosses.length === 0) return undefined;
@@ -1353,6 +1487,23 @@ export class Game {
 
     this.scene.add(this.createArena());
     this.scene.add(this.player);
+    this.scene.add(this.laserBeam);
+  }
+
+  private createLaserBeam(): THREE.Mesh<THREE.BoxGeometry, THREE.MeshBasicMaterial> {
+    const beam = new THREE.Mesh(
+      new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshBasicMaterial({
+        color: '#8f7dff',
+        transparent: true,
+        opacity: 0.58,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      }),
+    );
+    beam.visible = false;
+    beam.renderOrder = 6;
+    return beam;
   }
 
   private createArena(): THREE.Group {
@@ -1616,6 +1767,8 @@ export class Game {
       hammers: this.hammers.length,
       coolingHammers: this.hammers.filter((hammer) => hammer.cooldown > 0).length,
       hammerDurability: this.hammerDurability(this.skillLevel('hammers')),
+      laserActive: this.laserTimer > 0,
+      laserTimer: this.laserTimer,
       scheduledShots: this.scheduledShots.length,
       xpOrbs: this.xpOrbs.length,
       healthOrbs: this.healthOrbs.length,
