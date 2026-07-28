@@ -74,9 +74,11 @@ type Projectile = {
   mesh: THREE.Mesh;
   velocity: THREE.Vector3;
   damage: number;
+  trueDamage: number;
   pierce: number;
   age: number;
   radius: number;
+  hitEnemies: Set<Enemy>;
 };
 
 type EnemyProjectile = {
@@ -152,7 +154,7 @@ const ENEMY_CONFIGS: Record<EnemyKind, EnemyConfig> = {
   'boss-gunner': {
     kind: 'boss-gunner',
     color: '#7657ff',
-    hp: 540,
+    hp: 1160,
     speed: 1.18,
     radius: 1.05,
     xp: 28,
@@ -162,7 +164,7 @@ const ENEMY_CONFIGS: Record<EnemyKind, EnemyConfig> = {
   'boss-caster': {
     kind: 'boss-caster',
     color: '#18b6a6',
-    hp: 480,
+    hp: 1040,
     speed: 0.95,
     radius: 1,
     xp: 30,
@@ -172,7 +174,7 @@ const ENEMY_CONFIGS: Record<EnemyKind, EnemyConfig> = {
   'boss-charger': {
     kind: 'boss-charger',
     color: '#c0433f',
-    hp: 680,
+    hp: 1420,
     speed: 1.85,
     radius: 1.16,
     xp: 34,
@@ -225,7 +227,7 @@ const WEAPONS: Weapon[] = [
     description: '射速很慢，单发重击',
     fireRate: 0.55,
     projectileSpeed: 86,
-    damage: 24,
+    damage: 52,
     spread: 0,
     pellets: 1,
     color: '#7ee081',
@@ -233,8 +235,8 @@ const WEAPONS: Weapon[] = [
 ];
 
 const SKILLS: Skill[] = [
-  { id: 'rapid', name: '连发机关', icon: '速', description: '射速提升，重复选择继续升级' },
-  { id: 'damage', name: '糖果弹头', icon: '弹', description: '子弹伤害提升' },
+  { id: 'rapid', name: '连发机关', icon: '速', description: '射速大幅提升，重复选择更明显' },
+  { id: 'damage', name: '真伤弹头', icon: '弹', description: '子弹附加无视防御的真实伤害' },
   { id: 'multi', name: '双手开花', icon: '多', description: '额外发射子弹' },
   { id: 'speed', name: '溜冰鞋', icon: '靴', description: '移动速度提升' },
   { id: 'pierce', name: '穿透果冻', icon: '穿', description: '子弹可穿透更多怪物' },
@@ -493,10 +495,13 @@ export class Game {
 
   private updateSpawning(delta: number): void {
     this.spawnTimer -= delta;
-    this.bossTimer -= delta;
-    if (this.bossTimer <= 0) {
-      this.spawnBoss();
-      this.bossTimer = Math.max(26, 38 - this.survived * 0.04);
+    const bossAlive = this.enemies.some((enemy) => enemy.isBoss);
+    if (!bossAlive) {
+      this.bossTimer -= delta;
+      if (this.bossTimer <= 0) {
+        this.spawnBoss();
+        this.bossTimer = 36;
+      }
     }
     const interval = Math.max(0.22, 1.1 - this.survived * 0.01);
     const shouldStartNextWave =
@@ -589,7 +594,7 @@ export class Game {
 
   private updateShooting(delta: number): void {
     this.fireTimer -= delta;
-    const fireRate = this.selectedWeapon.fireRate * (1 + this.skillLevel('rapid') * 0.09);
+    const fireRate = this.selectedWeapon.fireRate * this.rapidFireMultiplier();
     if (this.fireTimer > 0 || this.enemies.length === 0) return;
     this.fireTimer = 1 / fireRate;
 
@@ -607,7 +612,7 @@ export class Game {
           timer: i * 0.055,
           angle: baseAngle + offset,
           damageMultiplier: 0.88,
-          pierceBonus: 2 + Math.floor(this.skillLevel('pierce') / 2),
+          pierceBonus: 2 + this.skillLevel('pierce'),
           color: '#ffe066',
         });
       }
@@ -642,11 +647,13 @@ export class Game {
       let remove = projectile.age > 2.1;
       for (let j = this.enemies.length - 1; j >= 0; j -= 1) {
         const enemy = this.enemies[j];
+        if (projectile.hitEnemies.has(enemy)) continue;
         const hitRadius = projectile.radius + enemy.radius;
         const dx = projectile.mesh.position.x - enemy.mesh.position.x;
         const dz = projectile.mesh.position.z - enemy.mesh.position.z;
         if (dx * dx + dz * dz > hitRadius * hitRadius) continue;
-        this.damageEnemy(enemy, projectile.damage);
+        projectile.hitEnemies.add(enemy);
+        this.damageEnemy(enemy, projectile.damage, projectile.trueDamage);
         projectile.pierce -= 1;
         if (projectile.pierce < 0) {
           remove = true;
@@ -958,9 +965,11 @@ export class Game {
       mesh,
       velocity: direction.multiplyScalar(this.selectedWeapon.projectileSpeed),
       damage: this.weaponDamage() * damageMultiplier,
-      pierce: (this.skillLevel('pierce') > 0 ? Math.floor(this.skillLevel('pierce') / 2) : 0) + pierceBonus,
+      trueDamage: this.weaponTrueDamage(),
+      pierce: this.skillLevel('pierce') + pierceBonus,
       age: 0,
       radius: 0.22,
+      hitEnemies: new Set(),
     });
     this.scene.add(mesh);
   }
@@ -1076,10 +1085,10 @@ export class Game {
     if (bar) bar.lookAt(this.camera.position);
   }
 
-  private damageEnemy(enemy: Enemy, damage: number): void {
+  private damageEnemy(enemy: Enemy, damage: number, trueDamage = 0): void {
     const luckyLevel = this.skillLevel('lucky');
     const crit = luckyLevel > 0 && Math.random() < 0.04 + luckyLevel * 0.012;
-    enemy.hp -= crit ? damage * 2.2 : damage;
+    enemy.hp -= (crit ? damage * 2.2 : damage) + trueDamage;
     this.updateEnemyHealthBar(enemy);
     this.flashEnemy(enemy.mesh);
     if (enemy.hp <= 0) {
@@ -1091,8 +1100,20 @@ export class Game {
   private weaponDamage(): number {
     const luckyLevel = this.skillLevel('lucky');
     const crit = luckyLevel > 0 && Math.random() < 0.04 + luckyLevel * 0.012;
-    const damage = this.selectedWeapon.damage * (1 + this.skillLevel('damage') * 0.13);
+    const damage = this.selectedWeapon.damage;
     return crit ? damage * 2.2 : damage;
+  }
+
+  private weaponTrueDamage(): number {
+    const level = this.skillLevel('damage');
+    if (level <= 0) return 0;
+    return 2 + level * 2.4;
+  }
+
+  private rapidFireMultiplier(): number {
+    const level = this.skillLevel('rapid');
+    if (level <= 0) return 1;
+    return 1 + level * 0.18 + Math.floor(level / 3) * 0.12;
   }
 
   private bossHudState(): { name: string; healthRatio: number } | undefined {
