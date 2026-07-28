@@ -22,6 +22,7 @@ interface ThreeGameDiagnostics {
   deflectedEnemyProjectiles: number;
   hammers: number;
   coolingHammers: number;
+  hammerDurability: number;
   scheduledShots: number;
   xpOrbs: number;
   healthOrbs: number;

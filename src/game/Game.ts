@@ -227,7 +227,7 @@ const SKILLS: Skill[] = [
   { id: 'speed', name: '溜冰鞋', icon: '靴', description: '移动速度提升' },
   { id: 'pierce', name: '穿透果冻', icon: '穿', description: '子弹可穿透更多怪物' },
   { id: 'lightning', name: '跳跳落雷', icon: '雷', description: '定时劈向怪群，升级增加次数和伤害' },
-  { id: 'hammers', name: '旋风大锤', icon: '锤', description: '身边生成环绕大锤，越升越多越猛' },
+  { id: 'hammers', name: '旋风大锤', icon: '锤', description: '环绕大锤升级会增加数量、伤害和耐久' },
   { id: 'aura', name: '蒜香泡泡', icon: '火', description: '生成灼烧火圈，奇数级加范围，偶数级加伤害' },
   { id: 'frost', name: '冰沙领域', icon: '冰', description: '降低附近怪物速度，升级扩大范围' },
   { id: 'growth', name: '经验糖果', icon: '糖', description: '获得更多经验，更快触发技能选择' },
@@ -764,7 +764,7 @@ export class Game {
 
     const orbitRadius = 1.75 + level * 0.07;
     const orbitSpeed = 2.7 + level * 0.11;
-    const hitsBeforeCooldown = Math.max(4, 7 - Math.floor(level / 3));
+    const hitsBeforeCooldown = this.hammerDurability(level);
     for (let i = 0; i < this.hammers.length; i += 1) {
       const hammer = this.hammers[i];
       hammer.cooldown = Math.max(0, hammer.cooldown - delta);
@@ -1039,6 +1039,10 @@ export class Game {
     hammer.cooldown = duration;
     hammer.hitCount = 0;
     hammer.mesh.visible = false;
+  }
+
+  private hammerDurability(level: number): number {
+    return 4 + Math.floor(level / 2);
   }
 
   private applyKnockback(enemy: Enemy, direction: THREE.Vector3, force: number): void {
@@ -1431,6 +1435,7 @@ export class Game {
       deflectedEnemyProjectiles: this.enemyProjectiles.filter((projectile) => projectile.deflected).length,
       hammers: this.hammers.length,
       coolingHammers: this.hammers.filter((hammer) => hammer.cooldown > 0).length,
+      hammerDurability: this.hammerDurability(this.skillLevel('hammers')),
       scheduledShots: this.scheduledShots.length,
       xpOrbs: this.xpOrbs.length,
       healthOrbs: this.healthOrbs.length,
