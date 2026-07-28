@@ -19,7 +19,13 @@ type SkillId =
   | 'frost'
   | 'growth'
   | 'lucky'
-  | 'regen';
+  | 'regen'
+  | 'sprout-burst'
+  | 'shotgun-pellets'
+  | 'smg-overdrive'
+  | 'sniper-focus'
+  | 'rocket-blast'
+  | 'rocket-payload';
 type GameMode = 'weapon-select' | 'playing' | 'level-up' | 'paused' | 'game-over';
 
 type Weapon = {
@@ -40,6 +46,7 @@ type Skill = {
   name: string;
   icon: string;
   description: string;
+  weapon?: WeaponId;
 };
 
 type Enemy = {
@@ -261,6 +268,53 @@ const SKILLS: Skill[] = [
   { id: 'lucky', name: '幸运骰子', icon: '运', description: '偶尔暴击，并让掉落经验更丰厚' },
   { id: 'regen', name: '草莓药瓶', icon: '药', description: '持续缓慢回血，升级后回复更快' },
 ];
+
+const WEAPON_SKILLS: Skill[] = [
+  {
+    id: 'sprout-burst',
+    name: '苗苗连射',
+    icon: '苗',
+    description: '射手步枪每级增加五连发数量',
+    weapon: 'sprout-rifle',
+  },
+  {
+    id: 'shotgun-pellets',
+    name: '泡泡散布',
+    icon: '泡',
+    description: '泡泡霰弹每级增加弹丸数量',
+    weapon: 'bubble-shotgun',
+  },
+  {
+    id: 'smg-overdrive',
+    name: '星星过热',
+    icon: '星',
+    description: '星星冲锋枪专属射速继续提升',
+    weapon: 'star-smg',
+  },
+  {
+    id: 'sniper-focus',
+    name: '狙击重击',
+    icon: '狙',
+    description: '重炮狙击枪每级提高单发伤害',
+    weapon: 'sniper-rifle',
+  },
+  {
+    id: 'rocket-blast',
+    name: '爆炸半径',
+    icon: '爆',
+    description: '番茄火箭筒每级扩大爆炸范围',
+    weapon: 'rocket-launcher',
+  },
+  {
+    id: 'rocket-payload',
+    name: '加量装药',
+    icon: '炮',
+    description: '番茄火箭筒每级提高爆炸伤害',
+    weapon: 'rocket-launcher',
+  },
+];
+
+const ALL_SKILLS = [...SKILLS, ...WEAPON_SKILLS];
 
 export class Game {
   private readonly renderer: THREE.WebGLRenderer;
@@ -607,7 +661,7 @@ export class Game {
 
   private updateShooting(delta: number): void {
     this.fireTimer -= delta;
-    const fireRate = this.selectedWeapon.fireRate * this.rapidFireMultiplier();
+    const fireRate = this.selectedWeapon.fireRate * this.rapidFireMultiplier() * this.weaponFireRateMultiplier();
     if (this.fireTimer > 0 || this.enemies.length === 0) return;
     this.fireTimer = 1 / fireRate;
 
@@ -619,7 +673,7 @@ export class Game {
     this.player.rotation.y = baseAngle;
     const extraPellets = Math.floor(this.skillLevel('multi') / 3);
     if (this.selectedWeapon.id === 'sprout-rifle') {
-      const burstCount = 5 + extraPellets;
+      const burstCount = 5 + extraPellets + this.skillLevel('sprout-burst');
       for (let i = 0; i < burstCount; i += 1) {
         const offset = (i - (burstCount - 1) / 2) * this.selectedWeapon.spread;
         this.scheduledShots.push({
@@ -631,7 +685,7 @@ export class Game {
         });
       }
     } else {
-      const pellets = this.selectedWeapon.pellets + extraPellets;
+      const pellets = this.selectedWeapon.pellets + extraPellets + this.weaponExtraPellets();
       for (let i = 0; i < pellets; i += 1) {
         const center = (pellets - 1) / 2;
         const angle = baseAngle + (i - center) * this.selectedWeapon.spread;
@@ -1003,7 +1057,7 @@ export class Game {
       pierce: this.skillLevel('pierce') + pierceBonus,
       age: 0,
       radius: isRocket ? 0.32 : 0.22,
-      explosionRadius: isRocket ? 2.45 + this.skillLevel('multi') * 0.06 : 0,
+      explosionRadius: isRocket ? this.rocketExplosionRadius() : 0,
       hitEnemies: new Set(),
     });
     this.scene.add(mesh);
@@ -1170,7 +1224,13 @@ export class Game {
   private weaponDamage(): number {
     const luckyLevel = this.skillLevel('lucky');
     const crit = luckyLevel > 0 && Math.random() < 0.04 + luckyLevel * 0.012;
-    const damage = this.selectedWeapon.damage;
+    let damage = this.selectedWeapon.damage;
+    if (this.selectedWeapon.id === 'sniper-rifle') {
+      damage += this.skillLevel('sniper-focus') * 7;
+    }
+    if (this.selectedWeapon.id === 'rocket-launcher') {
+      damage += this.skillLevel('rocket-payload') * 3.5;
+    }
     return crit ? damage * 2.2 : damage;
   }
 
@@ -1184,6 +1244,21 @@ export class Game {
     const level = this.skillLevel('rapid');
     if (level <= 0) return 1;
     return 1 + level * 0.18 + Math.floor(level / 3) * 0.12;
+  }
+
+  private weaponFireRateMultiplier(): number {
+    if (this.selectedWeapon.id !== 'star-smg') return 1;
+    const level = this.skillLevel('smg-overdrive');
+    return 1 + level * 0.13;
+  }
+
+  private weaponExtraPellets(): number {
+    if (this.selectedWeapon.id !== 'bubble-shotgun') return 0;
+    return this.skillLevel('shotgun-pellets');
+  }
+
+  private rocketExplosionRadius(): number {
+    return 2.45 + this.skillLevel('rocket-blast') * 0.28 + this.skillLevel('multi') * 0.06;
   }
 
   private bossHudState(): { name: string; healthRatio: number } | undefined {
@@ -1225,7 +1300,9 @@ export class Game {
   }
 
   private skillChoices(): SkillChoiceView[] {
-    const available = SKILLS.filter((skill) => this.skillLevel(skill.id) < MAX_SKILL_LEVEL);
+    const available = ALL_SKILLS.filter(
+      (skill) => (!skill.weapon || skill.weapon === this.selectedWeapon.id) && this.skillLevel(skill.id) < MAX_SKILL_LEVEL,
+    );
     return available
       .sort(() => Math.random() - 0.5)
       .slice(0, 3)
@@ -1248,7 +1325,7 @@ export class Game {
   }
 
   private skillSummary(): string {
-    const entries = SKILLS.filter((skill) => this.skillLevel(skill.id) > 0).map(
+    const entries = ALL_SKILLS.filter((skill) => this.skillLevel(skill.id) > 0).map(
       (skill) => `${skill.icon}${this.skillLevel(skill.id)}`,
     );
     return entries.length > 0 ? entries.join(' ') : '无技能';
