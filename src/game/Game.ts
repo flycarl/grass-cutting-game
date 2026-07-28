@@ -1153,7 +1153,7 @@ export class Game {
 
   private createScene(): void {
     this.scene.background = new THREE.Color('#9fd9ff');
-    this.scene.fog = new THREE.Fog('#9fd9ff', 26, 54);
+    this.scene.fog = new THREE.Fog('#9fd9ff', 34, 88);
 
     const hemi = new THREE.HemisphereLight('#fff8d9', '#68b77b', 1.9);
     this.scene.add(hemi);
@@ -1181,16 +1181,36 @@ export class Game {
     floor.receiveShadow = true;
     arena.add(floor);
 
-    for (let i = 0; i < 90; i += 1) {
-      const tuft = new THREE.Mesh(
-        new THREE.ConeGeometry(0.12 + Math.random() * 0.12, 0.42 + Math.random() * 0.28, 5),
-        new THREE.MeshStandardMaterial({ color: i % 3 === 0 ? '#4fae57' : '#8bd66f', roughness: 0.85 }),
-      );
-      tuft.position.set((Math.random() - 0.5) * 52, 0.2, (Math.random() - 0.5) * 38);
-      tuft.rotation.y = Math.random() * Math.PI;
-      tuft.castShadow = true;
-      arena.add(tuft);
-    }
+    const grassGeometry = new THREE.ConeGeometry(1, 1, 5);
+    const darkGrass = new THREE.InstancedMesh(grassGeometry, new THREE.MeshStandardMaterial({ color: '#4fae57', roughness: 0.85 }), 220);
+    const lightGrass = new THREE.InstancedMesh(grassGeometry, new THREE.MeshStandardMaterial({ color: '#8bd66f', roughness: 0.85 }), 260);
+    const dummy = new THREE.Object3D();
+    let darkIndex = 0;
+    let lightIndex = 0;
+    const placeGrass = (count: number, width: number, depth: number, minHeight: number, maxHeight: number): void => {
+      for (let i = 0; i < count; i += 1) {
+        const height = minHeight + Math.random() * (maxHeight - minHeight);
+        const radius = 0.1 + Math.random() * 0.16;
+        dummy.position.set((Math.random() - 0.5) * width, height / 2, (Math.random() - 0.5) * depth);
+        dummy.rotation.set(0, Math.random() * Math.PI, 0);
+        dummy.scale.set(radius, height, radius);
+        dummy.updateMatrix();
+        if ((i + count) % 3 === 0 && darkIndex < darkGrass.count) {
+          darkGrass.setMatrixAt(darkIndex, dummy.matrix);
+          darkIndex += 1;
+        } else if (lightIndex < lightGrass.count) {
+          lightGrass.setMatrixAt(lightIndex, dummy.matrix);
+          lightIndex += 1;
+        }
+      }
+    };
+    placeGrass(180, 72, 56, 0.38, 0.72);
+    placeGrass(300, 180, 140, 0.28, 0.56);
+    darkGrass.count = darkIndex;
+    lightGrass.count = lightIndex;
+    darkGrass.castShadow = true;
+    lightGrass.castShadow = true;
+    arena.add(darkGrass, lightGrass);
 
     return arena;
   }
