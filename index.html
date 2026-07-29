@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#77c96d" />
+    <title>卡通割草幸存者</title>
+    <script type="module" crossorigin src="/grass-cutting-game/assets/index-lZTPY8tp.js"></script>
+    <link rel="stylesheet" crossorigin href="/grass-cutting-game/assets/index-D-AotIyz.css">
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="game-canvas" aria-label="卡通割草幸存者游戏画面"></canvas>
+      <section id="hud" aria-live="polite">
+        <div class="meter-cluster">
+          <div class="meter-row">
+            <span>生命</span>
+            <div class="meter-track"><div id="health-fill" class="meter-fill health"></div></div>
+          </div>
+          <div class="meter-row">
+            <span>体力</span>
+            <div class="meter-track"><div id="stamina-fill" class="meter-fill stamina"></div></div>
+          </div>
+          <div class="meter-row">
+            <span>经验</span>
+            <div class="meter-track"><div id="xp-fill" class="meter-fill xp"></div></div>
+          </div>
+        </div>
+        <div class="hud-pill"><span>等级</span><strong id="level-value">01</strong></div>
+        <div class="hud-pill"><span>击败</span><strong id="kill-value">000</strong></div>
+        <div class="hud-pill"><span>波次</span><strong id="wave-value">01</strong></div>
+        <div class="hud-pill"><span>怪物</span><strong id="enemy-value">00</strong></div>
+        <div id="weapon-name">未选武器</div>
+        <div id="aim-mode">自动瞄准</div>
+        <div id="skill-value">无技能</div>
+        <div id="status-line">选择开局枪械</div>
+      </section>
+      <section id="boss-bar" hidden aria-live="polite">
+        <div id="boss-title">BOSS</div>
+        <div id="boss-track"><div id="boss-fill"></div></div>
+        <div id="boss-percent">100%</div>
+      </section>
+      <div id="top-actions">
+        <button id="pause-button" type="button" aria-label="暂停">II</button>
+        <button id="restart-button" type="button" aria-label="重新开始">R</button>
+      </div>
+      <section id="overlay">
+        <div class="overlay-panel">
+          <h1 id="overlay-title">选择开局枪械</h1>
+          <div id="overlay-body" class="choice-grid"></div>
+        </div>
+      </section>
+      <div id="touch-controls" aria-hidden="true">
+        <div id="touch-stick">
+          <div id="touch-knob"></div>
+        </div>
+        <button id="dash-button" type="button">冲</button>
+      </div>
+    </main>
+  </body>
+</html>
