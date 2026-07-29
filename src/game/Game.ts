@@ -556,6 +556,7 @@ export class Game {
       this.updateLightning(delta);
       this.updateHammers(delta, elapsed);
       this.updateAura(delta);
+      this.updateFrostField(elapsed);
       this.updateHealing(delta);
       this.updateProjectiles(delta);
       this.updateEnemyProjectiles(delta);
@@ -1175,6 +1176,22 @@ export class Game {
         flame.rotation.set(0, angle, Math.sin(phase) * 0.18);
       });
     }
+  }
+
+  private updateFrostField(elapsed: number): void {
+    const level = this.skillLevel('frost');
+    const frostRing = this.player.getObjectByName('frost-ring') as THREE.Mesh | undefined;
+    if (!frostRing) return;
+    if (level <= 0) {
+      frostRing.visible = false;
+      return;
+    }
+    const radius = 3.4 + level * 0.25;
+    frostRing.visible = true;
+    frostRing.scale.setScalar(radius);
+    frostRing.rotation.z = -elapsed * 0.42;
+    const material = frostRing.material as THREE.MeshBasicMaterial;
+    material.opacity = 0.22 + Math.sin(elapsed * 5.5) * 0.05;
   }
 
   private updateHealing(delta: number): void {
@@ -1798,6 +1815,23 @@ export class Game {
     aura.position.y = 0.04;
     aura.visible = false;
     group.add(aura);
+
+    const frostRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.94, 1.04, 72),
+      new THREE.MeshBasicMaterial({
+        color: '#6edcff',
+        transparent: true,
+        opacity: 0.24,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+    );
+    frostRing.name = 'frost-ring';
+    frostRing.rotation.x = -Math.PI / 2;
+    frostRing.position.y = 0.07;
+    frostRing.visible = false;
+    frostRing.renderOrder = 3;
+    group.add(frostRing);
 
     const flames = new THREE.Group();
     flames.name = 'aura-flames';
