@@ -138,6 +138,11 @@ const MAX_STAMINA = 100;
 const ROLL_COST = 35;
 const ROLL_DURATION = 0.28;
 const ROLL_SPEED = 16;
+const BOSS_TARGET_SECONDS: Partial<Record<EnemyKind, number>> = {
+  'boss-gunner': 30,
+  'boss-caster': 34,
+  'boss-charger': 38,
+};
 
 const ENEMY_CONFIGS: Record<EnemyKind, EnemyConfig> = {
   normal: {
@@ -204,7 +209,7 @@ const WEAPONS: Weapon[] = [
     id: 'sprout-rifle',
     name: '射手步枪',
     icon: '苗',
-    description: '精准五连发，自带穿透',
+    description: '精准三连发，自带穿透',
     fireRate: 2.35,
     projectileSpeed: 65,
     damage: 3,
@@ -294,7 +299,7 @@ const WEAPON_SKILLS: Skill[] = [
     id: 'sprout-burst',
     name: '苗苗连射',
     icon: '苗',
-    description: '射手步枪每级增加五连发数量',
+    description: '射手步枪每级增加连发数量',
     weapon: 'sprout-rifle',
   },
   {
@@ -828,7 +833,7 @@ export class Game {
     this.fireTimer = 1 / fireRate;
     const extraPellets = Math.floor(this.skillLevel('multi') / 3);
     if (this.selectedWeapon.id === 'sprout-rifle') {
-      const burstCount = 5 + extraPellets + this.skillLevel('sprout-burst');
+      const burstCount = 3 + extraPellets + this.skillLevel('sprout-burst');
       for (let i = 0; i < burstCount; i += 1) {
         const offset = (i - (burstCount - 1) / 2) * this.selectedWeapon.spread;
         this.scheduledShots.push({
@@ -1238,6 +1243,7 @@ export class Game {
       this.player.position.z + Math.cos(angle) * radius,
     );
     const difficulty = Math.min(1.18, 1 + this.survived / 180);
+    const maxHp = this.bossHpForCurrentWeapon(config.kind) * difficulty;
     this.enemies.push({
       kind: config.kind,
       mesh,
@@ -1245,8 +1251,8 @@ export class Game {
       burnEffect: visual.burnEffect,
       targetMarker: visual.targetMarker,
       isBoss: true,
-      hp: config.hp * difficulty,
-      maxHp: config.hp * difficulty,
+      hp: maxHp,
+      maxHp,
       speed: config.speed + this.survived * 0.0025,
       radius: config.radius,
       xp: config.xp + Math.floor(this.survived / 18),
@@ -1257,6 +1263,24 @@ export class Game {
       knockback: new THREE.Vector3(),
     });
     this.scene.add(mesh);
+  }
+
+  private bossHpForCurrentWeapon(kind: EnemyKind): number {
+    const targetSeconds = BOSS_TARGET_SECONDS[kind] ?? 30;
+    return Math.round(this.baseWeaponSustainedDps() * targetSeconds);
+  }
+
+  private baseWeaponSustainedDps(): number {
+    switch (this.selectedWeapon.id) {
+      case 'sprout-rifle':
+        return this.selectedWeapon.fireRate * 3 * this.selectedWeapon.damage * 0.88;
+      case 'bubble-shotgun':
+        return this.selectedWeapon.fireRate * this.selectedWeapon.pellets * this.selectedWeapon.damage;
+      case 'laser-rifle':
+        return this.selectedWeapon.damage;
+      default:
+        return this.selectedWeapon.fireRate * this.selectedWeapon.damage;
+    }
   }
 
   private pickEnemyConfig(): EnemyConfig {
