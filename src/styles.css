@@ -59,6 +59,7 @@ button {
 .meter-cluster,
 .hud-pill,
 #weapon-name,
+#aim-mode,
 #skill-value,
 #status-line {
   border: 2px solid rgba(38, 50, 56, 0.22);
@@ -137,6 +138,7 @@ button {
 }
 
 #weapon-name,
+#aim-mode,
 #skill-value,
 #status-line {
   min-height: 48px;
@@ -151,6 +153,12 @@ button {
 #weapon-name {
   min-width: 120px;
   border-bottom-width: 5px;
+}
+
+#aim-mode {
+  min-width: 96px;
+  border-color: rgba(119, 255, 102, 0.62);
+  color: #d8ffd0;
 }
 
 #skill-value {
@@ -441,6 +449,12 @@ button {
     min-width: 104px;
     height: 44px;
     font-size: 0.74rem;
+  }
+
+  #aim-mode {
+    min-width: 92px;
+    height: 44px;
+    font-size: 0.72rem;
   }
 
   .choice-grid {

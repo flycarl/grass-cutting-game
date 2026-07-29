@@ -571,6 +571,7 @@ export class Game {
       waveNumber: this.waveNumber,
       enemies: this.enemies.length,
       skills: this.skillSummary(),
+      aimMode: this.aimModeLabel(),
       boss: this.bossHudState(),
     });
     this.publishDiagnostics();
@@ -633,8 +634,10 @@ export class Game {
 
   private updateTargetSelection(): void {
     if (this.input.consumeTargetSelectRequest()) {
-      this.manualTargetMode = true;
+      this.manualTargetMode = !this.manualTargetMode;
+      this.hoveredTarget = null;
       this.lockedTarget = null;
+      this.updateTargetMarkers();
     }
     if (this.input.consumeAutoAimRequest()) {
       this.manualTargetMode = false;
@@ -1611,6 +1614,11 @@ export class Game {
 
   private skillLevel(id: SkillId): number {
     return this.skillLevels.get(id) ?? 0;
+  }
+
+  private aimModeLabel(): string {
+    if (!this.manualTargetMode) return '自动瞄准';
+    return this.lockedTarget ? '锁定目标' : '鼠标选怪';
   }
 
   private skillAppliesToWeapon(id: SkillId): boolean {

@@ -10,6 +10,7 @@ type HudState = {
   waveNumber: number;
   enemies: number;
   skills: string;
+  aimMode: string;
   boss?: {
     name: string;
     healthRatio: number;
@@ -51,6 +52,7 @@ export class Hud {
   private readonly enemyValue = this.getElement('#enemy-value');
   private readonly skillValue = this.getElement('#skill-value');
   private readonly weaponName = this.getElement('#weapon-name');
+  private readonly aimMode = this.getElement('#aim-mode');
   private readonly statusLine = this.getElement('#status-line');
   private readonly bossBar = this.getElement('#boss-bar');
   private readonly bossTitle = this.getElement('#boss-title');
@@ -76,6 +78,7 @@ export class Hud {
     this.waveValue.textContent = String(Math.max(1, state.waveNumber)).padStart(2, '0');
     this.enemyValue.textContent = String(state.enemies).padStart(2, '0');
     this.skillValue.textContent = state.skills;
+    this.aimMode.textContent = state.aimMode;
     if (state.boss) {
       const percent = Math.max(0, Math.min(100, Math.round(state.boss.healthRatio * 100)));
       this.bossBar.hidden = false;
