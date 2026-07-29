@@ -1429,7 +1429,7 @@ export class Game {
   }
 
   private hammerDurability(level: number): number {
-    return 4 + Math.floor(level / 2);
+    return 6 + Math.floor(level / 2);
   }
 
   private applyKnockback(enemy: Enemy, direction: THREE.Vector3, force: number): void {
