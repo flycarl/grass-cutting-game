@@ -170,7 +170,7 @@ const ENEMY_CONFIGS: Record<EnemyKind, EnemyConfig> = {
   'boss-gunner': {
     kind: 'boss-gunner',
     color: '#7657ff',
-    hp: 820,
+    hp: 420,
     speed: 1.18,
     radius: 1.05,
     xp: 95,
@@ -180,7 +180,7 @@ const ENEMY_CONFIGS: Record<EnemyKind, EnemyConfig> = {
   'boss-caster': {
     kind: 'boss-caster',
     color: '#18b6a6',
-    hp: 760,
+    hp: 390,
     speed: 0.95,
     radius: 1,
     xp: 90,
@@ -190,7 +190,7 @@ const ENEMY_CONFIGS: Record<EnemyKind, EnemyConfig> = {
   'boss-charger': {
     kind: 'boss-charger',
     color: '#c0433f',
-    hp: 980,
+    hp: 450,
     speed: 1.85,
     radius: 1.16,
     xp: 115,
@@ -1202,7 +1202,7 @@ export class Game {
       0,
       this.player.position.z + Math.cos(angle) * radius,
     );
-    const difficulty = 1 + this.survived / 80;
+    const difficulty = Math.min(8, 1 + this.survived / 100);
     this.enemies.push({
       kind: config.kind,
       mesh,
@@ -1237,7 +1237,7 @@ export class Game {
       0,
       this.player.position.z + Math.cos(angle) * radius,
     );
-    const difficulty = 1 + this.survived / 95;
+    const difficulty = Math.min(1.18, 1 + this.survived / 180);
     this.enemies.push({
       kind: config.kind,
       mesh,
