@@ -24,6 +24,8 @@ export class InputController {
 
   private dashDown = false;
   private rollRequested = false;
+  private targetSelectRequested = false;
+  private autoAimRequested = false;
   private fireHeld = false;
   private firePressed = false;
 
@@ -31,6 +33,12 @@ export class InputController {
     this.keys.add(event.code);
     if (event.code === 'Space' && !event.repeat) {
       this.rollRequested = true;
+    }
+    if (event.code === 'KeyE' && !event.repeat) {
+      this.targetSelectRequested = true;
+    }
+    if (event.code === 'Digit1' && !event.repeat) {
+      this.autoAimRequested = true;
     }
     if (event.code === 'Space' || event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
       this.dashDown = true;
@@ -146,6 +154,18 @@ export class InputController {
   consumeRollRequest(): boolean {
     const requested = this.rollRequested;
     this.rollRequested = false;
+    return requested;
+  }
+
+  consumeTargetSelectRequest(): boolean {
+    const requested = this.targetSelectRequested;
+    this.targetSelectRequested = false;
+    return requested;
+  }
+
+  consumeAutoAimRequest(): boolean {
+    const requested = this.autoAimRequested;
+    this.autoAimRequested = false;
     return requested;
   }
 

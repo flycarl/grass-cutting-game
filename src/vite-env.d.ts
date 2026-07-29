@@ -16,6 +16,7 @@ interface ThreeGameDiagnostics {
   aimTargetIsBoss: boolean;
   enemyHealthRatios: number[];
   lowestEnemyHealthRatioSeen: number;
+  burningEnemies: number;
   waveNumber: number;
   projectiles: number;
   enemyProjectiles: number;
@@ -29,6 +30,9 @@ interface ThreeGameDiagnostics {
   xpOrbs: number;
   healthOrbs: number;
   weapon: string;
+  manualTargetMode: boolean;
+  hoveredTarget: number;
+  lockedTarget: number;
   aimAngle: number;
   rolling: boolean;
   playerKnockback: number;

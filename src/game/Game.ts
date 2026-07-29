@@ -57,6 +57,8 @@ type Enemy = {
   kind: EnemyKind;
   mesh: THREE.Group;
   healthFill: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+  burnEffect: THREE.Group;
+  targetMarker: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>;
   isBoss: boolean;
   hp: number;
   maxHp: number;
@@ -64,6 +66,8 @@ type Enemy = {
   radius: number;
   xp: number;
   stunTimer: number;
+  burnTimer: number;
+  burnDamage: number;
   attackTimer: number;
   knockback: THREE.Vector3;
 };
@@ -166,7 +170,7 @@ const ENEMY_CONFIGS: Record<EnemyKind, EnemyConfig> = {
   'boss-gunner': {
     kind: 'boss-gunner',
     color: '#7657ff',
-    hp: 1160,
+    hp: 820,
     speed: 1.18,
     radius: 1.05,
     xp: 95,
@@ -176,7 +180,7 @@ const ENEMY_CONFIGS: Record<EnemyKind, EnemyConfig> = {
   'boss-caster': {
     kind: 'boss-caster',
     color: '#18b6a6',
-    hp: 1040,
+    hp: 760,
     speed: 0.95,
     radius: 1,
     xp: 90,
@@ -186,7 +190,7 @@ const ENEMY_CONFIGS: Record<EnemyKind, EnemyConfig> = {
   'boss-charger': {
     kind: 'boss-charger',
     color: '#c0433f',
-    hp: 1420,
+    hp: 980,
     speed: 1.85,
     radius: 1.16,
     xp: 115,
@@ -278,7 +282,7 @@ const SKILLS: Skill[] = [
   { id: 'pierce', name: '穿透果冻', icon: '穿', description: '子弹可穿透更多怪物' },
   { id: 'lightning', name: '跳跳落雷', icon: '雷', description: '定时劈向怪群，升级增加次数和伤害' },
   { id: 'hammers', name: '旋风大锤', icon: '锤', description: '环绕大锤升级会增加数量、伤害和耐久' },
-  { id: 'aura', name: '蒜香泡泡', icon: '火', description: '生成灼烧火圈，奇数级加范围，偶数级加伤害' },
+  { id: 'aura', name: '蒜香泡泡', icon: '火', description: '生成灼烧火圈，并让命中的怪物持续燃烧' },
   { id: 'frost', name: '冰沙领域', icon: '冰', description: '降低附近怪物速度，升级扩大范围' },
   { id: 'growth', name: '经验糖果', icon: '糖', description: '获得更多经验，更快触发技能选择' },
   { id: 'lucky', name: '幸运骰子', icon: '运', description: '偶尔暴击，并让掉落经验更丰厚' },
@@ -418,6 +422,9 @@ export class Game {
   private rollTimer = 0;
   private rollCooldown = 0;
   private aimAngle = 0;
+  private manualTargetMode = false;
+  private hoveredTarget: Enemy | null = null;
+  private lockedTarget: Enemy | null = null;
   private lowestEnemyHealthRatioSeen = 1;
   private frame = 0;
   private readonly rollDirection = new THREE.Vector3(0, 0, -1);
@@ -514,6 +521,10 @@ export class Game {
     this.hitCooldown = 0;
     this.rollTimer = 0;
     this.rollCooldown = 0;
+    this.manualTargetMode = false;
+    this.hoveredTarget = null;
+    this.lockedTarget = null;
+    this.updateTargetMarkers();
     this.playerKnockback.set(0, 0, 0);
     this.lowestEnemyHealthRatioSeen = 1;
     this.skillLevels.clear();
@@ -529,6 +540,7 @@ export class Game {
     if (this.mode === 'playing') {
       this.survived += delta;
       this.hitCooldown = Math.max(0, this.hitCooldown - delta);
+      this.updateTargetSelection();
       this.updateAim();
       this.updatePlayer(delta, elapsed);
       this.updateSpawning(delta);
@@ -619,6 +631,59 @@ export class Game {
     this.aimAngle = this.player.rotation.y;
   }
 
+  private updateTargetSelection(): void {
+    if (this.input.consumeTargetSelectRequest()) {
+      this.manualTargetMode = true;
+      this.lockedTarget = null;
+    }
+    if (this.input.consumeAutoAimRequest()) {
+      this.manualTargetMode = false;
+      this.hoveredTarget = null;
+      this.lockedTarget = null;
+      this.updateTargetMarkers();
+      return;
+    }
+
+    if (this.lockedTarget && !this.enemies.includes(this.lockedTarget)) this.lockedTarget = null;
+    if (!this.manualTargetMode) return;
+
+    const pointerAim = this.input.readAimNdc(this.aimNdc);
+    this.hoveredTarget = pointerAim ? this.pickEnemyAtPointer(pointerAim) : null;
+    if (this.input.consumeFirePress() && this.hoveredTarget) {
+      this.lockedTarget = this.hoveredTarget;
+    }
+    this.updateTargetMarkers();
+  }
+
+  private pickEnemyAtPointer(pointerAim: THREE.Vector2): Enemy | null {
+    this.aimRaycaster.setFromCamera(pointerAim, this.camera);
+    let selected: Enemy | null = null;
+    let selectedDistance = Number.POSITIVE_INFINITY;
+    const groundHit = this.aimRaycaster.ray.intersectPlane(this.groundPlane, this.aimPoint);
+    if (!groundHit) return null;
+    for (const enemy of this.enemies) {
+      const dx = enemy.mesh.position.x - groundHit.x;
+      const dz = enemy.mesh.position.z - groundHit.z;
+      const distance = dx * dx + dz * dz;
+      const pickRadius = Math.max(1.35, enemy.radius * 2.2);
+      if (distance < pickRadius * pickRadius && distance < selectedDistance) {
+        selected = enemy;
+        selectedDistance = distance;
+      }
+    }
+    return selected;
+  }
+
+  private updateTargetMarkers(): void {
+    for (const enemy of this.enemies) {
+      const active = this.manualTargetMode && (enemy === this.hoveredTarget || enemy === this.lockedTarget);
+      enemy.targetMarker.visible = active;
+      enemy.targetMarker.material.color.set(enemy === this.lockedTarget ? '#77ff66' : '#b8ff7a');
+      enemy.targetMarker.scale.setScalar(enemy === this.lockedTarget ? 1.18 : 1);
+      enemy.targetMarker.rotation.z += 0.045;
+    }
+  }
+
   private updateSpawning(delta: number): void {
     this.spawnTimer -= delta;
     const bossAlive = this.enemies.some((enemy) => enemy.isBoss);
@@ -648,6 +713,7 @@ export class Game {
     for (let i = this.enemies.length - 1; i >= 0; i -= 1) {
       const enemy = this.enemies[i];
       enemy.stunTimer = Math.max(0, enemy.stunTimer - delta);
+      if (!this.updateEnemyBurn(enemy, delta, elapsed)) continue;
       enemy.mesh.position.addScaledVector(enemy.knockback, delta);
       enemy.knockback.multiplyScalar(Math.exp(-8 * delta));
 
@@ -693,6 +759,25 @@ export class Game {
     }
     const chargeBoost = enemy.kind === 'boss-charger' && enemy.attackTimer > 0.75 ? 1.85 : 1;
     enemy.mesh.position.addScaledVector(directionToPlayer, enemy.speed * chargeBoost * frostFactor * delta);
+  }
+
+  private updateEnemyBurn(enemy: Enemy, delta: number, elapsed: number): boolean {
+    if (enemy.burnTimer <= 0) {
+      enemy.burnEffect.visible = false;
+      return true;
+    }
+
+    enemy.burnTimer = Math.max(0, enemy.burnTimer - delta);
+    enemy.burnEffect.visible = true;
+    enemy.burnEffect.rotation.y += delta * 5.8;
+    enemy.burnEffect.children.forEach((child, index) => {
+      const flame = child as THREE.Mesh;
+      const pulse = 0.86 + Math.sin(elapsed * 13 + index * 1.4) * 0.18;
+      flame.scale.setScalar(pulse * (enemy.isBoss ? 1.25 : 1));
+    });
+
+    this.damageEnemy(enemy, enemy.burnDamage * delta, 0, false, false);
+    return this.enemies.includes(enemy);
   }
 
   private updateBossAttack(enemy: Enemy, directionToPlayer: THREE.Vector3, distance: number, delta: number): void {
@@ -752,11 +837,21 @@ export class Game {
         });
       }
     } else {
-      const pellets = this.selectedWeapon.pellets + extraPellets + this.weaponExtraPellets();
+      const pellets = this.selectedWeapon.pellets + this.weaponExtraPellets();
       for (let i = 0; i < pellets; i += 1) {
         const center = (pellets - 1) / 2;
         const angle = baseAngle + (i - center) * this.selectedWeapon.spread;
         this.spawnProjectile(angle);
+      }
+      for (let i = 0; i < extraPellets; i += 1) {
+        const offset = (i - (extraPellets - 1) / 2) * Math.max(0.035, this.selectedWeapon.spread * 0.45);
+        this.scheduledShots.push({
+          timer: 0.14 + i * 0.11,
+          angle: baseAngle + offset,
+          damageMultiplier: 0.96,
+          pierceBonus: 0,
+          color: this.selectedWeapon.color,
+        });
       }
     }
     this.audio.shoot(this.selectedWeapon.id);
@@ -1109,6 +1204,8 @@ export class Game {
       kind: config.kind,
       mesh,
       healthFill: visual.healthFill,
+      burnEffect: visual.burnEffect,
+      targetMarker: visual.targetMarker,
       isBoss: config.boss ?? false,
       hp: config.hp * difficulty,
       maxHp: config.hp * difficulty,
@@ -1116,6 +1213,8 @@ export class Game {
       radius: config.radius,
       xp: config.xp + Math.floor(this.survived / 35),
       stunTimer: 0,
+      burnTimer: 0,
+      burnDamage: 0,
       attackTimer: 0,
       knockback: new THREE.Vector3(),
     });
@@ -1140,6 +1239,8 @@ export class Game {
       kind: config.kind,
       mesh,
       healthFill: visual.healthFill,
+      burnEffect: visual.burnEffect,
+      targetMarker: visual.targetMarker,
       isBoss: true,
       hp: config.hp * difficulty,
       maxHp: config.hp * difficulty,
@@ -1147,6 +1248,8 @@ export class Game {
       radius: config.radius,
       xp: config.xp + Math.floor(this.survived / 18),
       stunTimer: 0,
+      burnTimer: 0,
+      burnDamage: 0,
       attackTimer: 0.8,
       knockback: new THREE.Vector3(),
     });
@@ -1345,16 +1448,26 @@ export class Game {
     if (bar) bar.lookAt(this.camera.position);
   }
 
-  private damageEnemy(enemy: Enemy, damage: number, trueDamage = 0): void {
+  private damageEnemy(enemy: Enemy, damage: number, trueDamage = 0, applyBurn = true, flash = true): void {
     const luckyLevel = this.skillLevel('lucky');
     const crit = luckyLevel > 0 && Math.random() < 0.04 + luckyLevel * 0.012;
     enemy.hp -= (crit ? damage * 2.2 : damage) + trueDamage;
+    if (applyBurn && enemy.hp > 0) this.igniteEnemy(enemy);
     this.updateEnemyHealthBar(enemy);
-    this.flashEnemy(enemy.mesh);
+    if (flash) this.flashEnemy(enemy.mesh);
     if (enemy.hp <= 0) {
       const index = this.enemies.indexOf(enemy);
       if (index >= 0) this.killEnemy(index);
     }
+  }
+
+  private igniteEnemy(enemy: Enemy): void {
+    const level = this.skillLevel('aura');
+    if (level <= 0) return;
+    const damageLevel = Math.floor(level / 2);
+    enemy.burnTimer = Math.max(enemy.burnTimer, 2.2 + level * 0.18);
+    enemy.burnDamage = Math.max(enemy.burnDamage, 4.2 + damageLevel * 2.2);
+    enemy.burnEffect.visible = true;
   }
 
   private weaponDamage(): number {
@@ -1446,6 +1559,7 @@ export class Game {
   }
 
   private findNearestEnemy(): Enemy | null {
+    if (this.lockedTarget && this.enemies.includes(this.lockedTarget)) return this.lockedTarget;
     let nearest: Enemy | null = null;
     let nearestDistance = Infinity;
     const bosses = this.enemies.filter((enemy) => enemy.isBoss);
@@ -1676,6 +1790,8 @@ export class Game {
   private createEnemyMesh(config: EnemyConfig): {
     group: THREE.Group;
     healthFill: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>;
+    burnEffect: THREE.Group;
+    targetMarker: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>;
   } {
     const group = new THREE.Group();
     const body = new THREE.Mesh(
@@ -1754,7 +1870,57 @@ export class Game {
     bar.add(barBack, healthFill);
     group.add(bar);
 
-    return { group, healthFill };
+    const targetMarker = new THREE.Mesh(
+      new THREE.RingGeometry(config.boss ? 0.95 : 0.58, config.boss ? 1.12 : 0.72, 4),
+      new THREE.MeshBasicMaterial({
+        color: '#77ff66',
+        transparent: true,
+        opacity: 0.88,
+        depthTest: false,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      }),
+    );
+    targetMarker.rotation.x = -Math.PI / 2;
+    targetMarker.rotation.z = Math.PI / 4;
+    targetMarker.position.y = 0.08;
+    targetMarker.renderOrder = 7;
+    targetMarker.visible = false;
+    group.add(targetMarker);
+
+    const burnEffect = this.createBurnEffect(config.boss ? 1.25 : 0.82);
+    burnEffect.position.y = body.position.y + (config.boss ? 0.1 : 0);
+    burnEffect.visible = false;
+    group.add(burnEffect);
+
+    return { group, healthFill, burnEffect, targetMarker };
+  }
+
+  private createBurnEffect(scale: number): THREE.Group {
+    const group = new THREE.Group();
+    group.name = 'burn-effect';
+    const colors = ['#ff3b1f', '#ff8a1f', '#ffe066'];
+    for (let i = 0; i < 5; i += 1) {
+      const flame = new THREE.Mesh(
+        new THREE.ConeGeometry(0.08 + i * 0.012, 0.34 + i * 0.035, 7),
+        new THREE.MeshBasicMaterial({
+          color: colors[i % colors.length],
+          transparent: true,
+          opacity: 0.78,
+          depthTest: false,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          toneMapped: false,
+        }),
+      );
+      const angle = (i / 5) * Math.PI * 2;
+      flame.position.set(Math.sin(angle) * 0.22 * scale, 0.18 + (i % 2) * 0.08, Math.cos(angle) * 0.22 * scale);
+      flame.scale.setScalar(scale);
+      flame.castShadow = false;
+      flame.receiveShadow = false;
+      group.add(flame);
+    }
+    return group;
   }
 
   private createXpOrb(position: THREE.Vector3, value: number): XpOrb {
@@ -1800,6 +1966,7 @@ export class Game {
       aimTargetIsBoss: this.findNearestEnemy()?.isBoss ?? false,
       enemyHealthRatios: this.enemies.map((enemy) => THREE.MathUtils.clamp(enemy.hp / enemy.maxHp, 0, 1)),
       lowestEnemyHealthRatioSeen: this.lowestEnemyHealthRatioSeen,
+      burningEnemies: this.enemies.filter((enemy) => enemy.burnTimer > 0).length,
       waveNumber: this.waveNumber,
       projectiles: this.projectiles.length,
       enemyProjectiles: this.enemyProjectiles.length,
@@ -1813,6 +1980,9 @@ export class Game {
       xpOrbs: this.xpOrbs.length,
       healthOrbs: this.healthOrbs.length,
       weapon: this.selectedWeapon.id,
+      manualTargetMode: this.manualTargetMode,
+      hoveredTarget: this.hoveredTarget ? this.enemies.indexOf(this.hoveredTarget) : -1,
+      lockedTarget: this.lockedTarget ? this.enemies.indexOf(this.lockedTarget) : -1,
       aimAngle: this.aimAngle,
       rolling: this.rollTimer > 0,
       playerKnockback: this.playerKnockback.length(),
