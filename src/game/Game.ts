@@ -164,7 +164,7 @@ const ENEMY_CONFIGS: Record<EnemyKind, EnemyConfig> = {
     hp: 46,
     speed: 0.92,
     radius: 0.74,
-    xp: 5,
+    xp: 9,
     scale: [1.42, 1.05, 1.32],
   },
   'boss-gunner': {
